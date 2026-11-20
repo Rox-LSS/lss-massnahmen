@@ -27,20 +27,26 @@ Das Script **alarmiert nichts, kauft nichts und klickt nichts für dich**. Es ze
 
 ## Installation
 1. Browser-Erweiterung **Tampermonkey** oder **Violentmonkey** installieren.
-2. Script installieren: über Greasy Fork *(Link folgt)* oder hier im Repository die Datei `lss-massnahmen.user.js` öffnen → **Raw** → Tampermonkey fragt nach → **Installieren**.
+2. Script installieren: über [Greasy Fork](https://greasyfork.org/de/scripts/606349) oder hier im Repository die Datei `lss-massnahmen.user.js` öffnen → **Raw** → Tampermonkey fragt nach → **Installieren**.
 3. Leitstellenspiel neu laden (F5).
+
+## Funktionen an/aus
+Ganz oben im Script unter `FUNKTIONEN` kannst du jede Funktion mit `'yes'` oder `'no'` ein- oder ausschalten: `massnahmen`, `abzeichen`, `meldungen`, `statistik`, `personalPanel`, `rechner`, `werbeWarnung`. Danach speichern und das Spiel neu laden.
 
 ## Einstellungen
 Ganz oben im Script unter `CFG`:
 - `zoom` – Größe aller Elemente (z. B. 1.3)
 - `besetztChance` – wie oft beim Anruf besetzt ist
 - `rueckmeldungMin` / `rueckmeldungMax` – Rückmeldezeit in Sekunden
-- `werbeWarnung` / `werbeWarnAlleMin` – Werbephasen-Warnung an/aus und Wiederholung
+- `werbeWarnAlleMin` – wie oft die Werbephasen-Warnung wiederholt wird
 
 ## Datenschutz & Datenquellen
-- Eigene Spieldaten von leitstellenspiel.de (Gebäude, Fahrzeuge, Personalseiten deiner Wachen). Das Personal wird mit kurzen Pausen zwischen den Wachen geladen und 30 Minuten zwischengespeichert.
+- Eigene Spieldaten von leitstellenspiel.de (Gebäude, Fahrzeuge, Personalseiten deiner Wachen). Gebäude und Fahrzeuge werden nach dem Forumsstandard im sessionStorage (`aBuildings`, `aVehicles`) zwischengespeichert und höchstens alle 5 Minuten neu abgefragt. Das Personal wird mit kurzen Pausen zwischen den Wachen geladen und 30 Minuten zwischengespeichert.
 - Fahrzeug- und Lehrgangsdaten (Besatzung, nötige Ausbildungen, Lehrgangsdauer) von der Schnittstelle des LSS-Managers (api.lss-manager.de). Danke an das LSSM-Team!
 - Es werden **keine Daten an Dritte gesendet**. Der Fortschritt wird nur lokal im Browser gespeichert.
+
+## Entstehung
+Das Script ist mit KI-Unterstützung (Claude von Anthropic) entstanden. Idee, Funktionen und Tests im Spiel: Rox88.
 
 ## Hinweise
 - Die Maßnahmen sind Rollenspiel – im Spiel selbst ändern sie nichts.
