@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         LSS Leitstellen-Maßnahmen
 // @namespace    rox88.lss.massnahmen
-// @version      1.1.1
-// @description  Realistische Zusatzaufgaben für Einsätze (Stadtwerke, Bauhof, Bahn, Behörden …) zum Abarbeiten per Anruf/Funk, dazu Personal- und Gebäudesuche, Personalrechner und Werbephasen-Warnung. Rein anzeigend – alarmiert und kauft nichts.
+// @version      1.2.0
+// @description  Realistische Zusatzaufgaben für Einsätze (Stadtwerke, Bauhof, Bahn, Behörden …) zum Abarbeiten per Anruf/Funk, dazu Personal- und Gebäudesuche, Personalrechner und Werbephasen-Warnung. Alarmiert nichts und klickt nichts an.
 // @author       Rox88 (LSS und greasyfork) aka Rox-LSS (Github)
 // @license      MIT
 // @match        https://www.leitstellenspiel.de/*
@@ -12,6 +12,8 @@
 
 /*
  * LSS Leitstellen-Maßnahmen – Copyright (c) 2026 Rox88(LSS und greasyfork) aka Rox-LSS (Github) – MIT-Lizenz
+ *
+ * Das Script ist mit KI-Unterstützung (Claude von Anthropic) entstanden. Idee, Funktionen und Tests im Spiel: Rox88.
  *
  * Datenquellen:
  *  - eigene Spieldaten über leitstellenspiel.de (/api/buildings, /api/vehicles, Personalseiten der Wachen)
@@ -33,6 +35,21 @@
 (function () {
   'use strict';
 
+  /* ==================================================================
+   * FUNKTIONEN AN / AUS   →   'yes' = an,  'no' = aus
+   * Danach speichern (Strg+S) und das Spiel neu laden (F5).
+   * ================================================================== */
+  const FUNKTIONEN = {
+    massnahmen:    'yes',  // Zusatzaufgaben im Einsatzfenster (Anrufen/Funken, Rückmeldungen)
+    abzeichen:     'yes',  // farbige Abzeichen 📋 in der Einsatzliste
+    meldungen:     'yes',  // Meldungen unten rechts (Rückmeldungen, vergessene Maßnahmen)
+    statistik:     'yes',  // Zähler unten links (offen / erledigt / vergessen)
+    personalPanel: 'yes',  // Button „👥 Personal & Wachen“ neben „Ort suchen…“
+    rechner:       'yes',  // Reiter „🧮 Rechner“ im Panel
+    werbeWarnung:  'yes',  // Warnung, wenn eine Wache unter Personalziel ist und keine Werbephase läuft
+  };
+  const AN = k => /^(yes|ja|j|y|true|an|on|1)$/i.test(String(FUNKTIONEN[k]).trim());
+
   /* ------------------------------------------------------------------
    * EINSTELLUNGEN
    * ------------------------------------------------------------------ */
@@ -42,7 +59,6 @@
     rueckmeldungMin: 120,     // Rückmeldung frühestens nach … Sekunden
     rueckmeldungMax: 300,     // … und spätestens nach … Sekunden
     personalCacheMin: 30,     // Personal-Liste so viele Minuten zwischenspeichern
-    werbeWarnung: true,       // warnen, wenn eine Wache unter Personalziel ist und keine Werbephase läuft
     werbeWarnAlleMin: 60,     // so oft (Minuten) die Warnung erneut als Meldung zeigen
     scanIntervall: 5000,      // ms – wie oft die Einsatzliste geprüft wird
     abschlussNachScans: 3,    // so oft muss ein Einsatz fehlen, bis er als beendet gilt
@@ -263,6 +279,17 @@
   const incr = (k, n) => setJ(k, (getJ(k, 0) || 0) + n);
   // Status: 0 offen, 1 erledigt, 2 wartet auf Rückmeldung (ist sie fällig, muss quittiert werden)
   const ready = x => x.s === 2 && Date.now() >= x.due;
+  // Spiel-Schnittstellen nach Forumsstandard im sessionStorage zwischenspeichern (max. alle 5 Minuten neu)
+  async function api(name, url) {
+    const uid = typeof window.user_id !== 'undefined' ? window.user_id : null;
+    try {
+      const c = JSON.parse(sessionStorage.getItem(name));
+      if (c && c.value && c.user_id === uid && Date.now() - c.lastUpdate < 5 * 60000) return c.value;
+    } catch (e) {}
+    const value = await fetch(url).then(r => r.json());
+    try { sessionStorage.setItem(name, JSON.stringify({ value, lastUpdate: Date.now(), user_id: uid })); } catch (e) {}
+    return value;
+  }
   const istVerband = el => !!(el && el.closest('[id^="mission_list"][id*="alliance"]'));
 
   const rng = seed => () => { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
@@ -410,6 +437,7 @@
     addCss();
     const toasts = document.createElement('div'); toasts.id = 'lssmz-toasts'; document.body.appendChild(toasts);
     const stats = document.createElement('div'); stats.id = 'lssmz-stats'; document.body.appendChild(stats);
+    stats.style.display = 'none';
     const toast = (txt, mid, fn) => {
       const t = document.createElement('div'); t.className = 'lssmz-toast'; t.textContent = txt;
       t.onclick = () => { if (fn) fn(); else if (mid && typeof window.lightboxOpen === 'function') window.lightboxOpen('/missions/' + mid); t.remove(); };
@@ -443,7 +471,7 @@
           const nk = id + ':' + x.k;
           if (!notified.has(nk)) { notified.add(nk); newNote = true; msgs.push([`📨 ${m.n}: ${x.fu}`, id]); }
         });
-        if (!cap) return;
+        if (!cap || !AN('abzeichen')) { if (badge) badge.remove(); return; }
         if (!badge) { badge = document.createElement('span'); badge.className = 'lssmz-badge'; cap.insertAdjacentElement('afterend', badge); }
         const started = m.t.some(x => x.s !== 0 || x.ans);
         const txt = o ? `📋 ${o}` : '✅';
@@ -464,29 +492,39 @@
         m.t.forEach(x => notified.delete(id + ':' + x.k)); newNote = true;
       }
       if (newNote) setJ('n', [...notified]);
-      stats.innerHTML = `📋 Maßnahmen – offen: ${open} · erledigt: ${getJ('ok', 0)} · vergessen: ${getJ('miss', 0)}` +
-        (werbeListe.length ? ` · <span class="lssmz-wb" style="cursor:pointer;color:#f0ad4e" title="${esc(werbeListe.join(', '))}">⚠️ ohne Werbephase: ${werbeListe.length}</span>` : '');
-      msgs.slice(0, 5).forEach(([t, id]) => toast(t, id));
+      letzteOffen = open; zeigeStats();
+      if (AN('meldungen')) msgs.slice(0, 5).forEach(([t, id]) => toast(t, id));
     }
-    scan();
-    setInterval(scan, CFG.scanIntervall);
+    let letzteOffen = 0;
+    function zeigeStats() {
+      const teile = [];
+      if (AN('massnahmen')) teile.push(`📋 Maßnahmen – offen: ${letzteOffen} · erledigt: ${getJ('ok', 0)} · vergessen: ${getJ('miss', 0)}`);
+      if (werbeListe.length) teile.push(`<span class="lssmz-wb" style="cursor:pointer;color:#f0ad4e" title="${esc(werbeListe.join(', '))}">⚠️ ohne Werbephase: ${werbeListe.length}</span>`);
+      stats.innerHTML = teile.join(' · ');
+      stats.style.display = AN('statistik') && teile.length ? '' : 'none';
+    }
+    if (AN('massnahmen')) { scan(); setInterval(scan, CFG.scanIntervall); }
+    zeigeStats();
     let panel = null;
-    try { panel = personalPanel(); } catch (e) { console.warn('[LSS-Maßnahmen] Panel', e); }
-    const zeigeWerbung = () => { if (panel) panel.oeffne('g', true); };
+    if (AN('personalPanel')) try { panel = personalPanel(); } catch (e) { console.warn('[LSS-Maßnahmen] Panel', e); }
+    let werbeIds = [];
+    const zeigeWerbung = () => { if (panel) panel.oeffne('g', true); else if (werbeIds[0] && typeof window.lightboxOpen === 'function') window.lightboxOpen(`/buildings/${werbeIds[0]}/hire`); };
     stats.addEventListener('click', e => { if (e.target.closest('.lssmz-wb')) zeigeWerbung(); });
     // Werbephasen prüfen
     let letzteWarnung = 0, letzteListe = '';
     async function werbeCheck() {
-      if (!CFG.werbeWarnung) return;
+      if (!AN('werbeWarnung')) return;
       try {
-        const b = await fetch('/api/buildings').then(r => r.json());
+        const b = await api('aBuildings', '/api/buildings');
         werbeListe = b.filter(brauchtWerbung).map(x => x.caption);
+        werbeIds = b.filter(brauchtWerbung).map(x => x.id);
         const key = werbeListe.join('|');
         if (werbeListe.length && (key !== letzteListe || Date.now() - letzteWarnung > CFG.werbeWarnAlleMin * 60000)) {
           toast(`⚠️ Keine Werbephase, obwohl Personal fehlt: ${werbeListe.slice(0, 4).join(', ')}${werbeListe.length > 4 ? ` (+${werbeListe.length - 4})` : ''} – klicken zum Anzeigen`, null, zeigeWerbung);
           letzteWarnung = Date.now();
         }
         letzteListe = key;
+        zeigeStats();
       } catch (e) {}
     }
     werbeCheck();
@@ -510,8 +548,8 @@
   let FZT = null, SCH = {};   // Fahrzeugtypen und Lehrgänge (LSSM-Schnittstelle)
   async function ladeGebaeude() {
     const [b, v, t, sc] = await Promise.all([
-      fetch('/api/buildings').then(r => r.json()),
-      fetch('/api/vehicles').then(r => r.json()),
+      api('aBuildings', '/api/buildings'),
+      api('aVehicles', '/api/vehicles'),
       fetch('https://api.lss-manager.de/de_DE/vehicles').then(r => r.json()).catch(() => null),
       fetch('https://api.lss-manager.de/de_DE/schoolings').then(r => r.json()).catch(() => null),
     ]);
@@ -705,7 +743,7 @@
       if (pp) { pp.remove(); pp = null; return; }
       addCss();
       pp = document.createElement('div'); pp.id = 'lssmz-pp';
-      pp.innerHTML = `<div class="hd"><span class="tab" data-t="p">👥 Personal</span><span class="tab" data-t="g">🏠 Gebäude</span><span class="tab" data-t="r">🧮 Rechner</span><span class="x" title="Schließen">✕</span></div>
+      pp.innerHTML = `<div class="hd"><span class="tab" data-t="p">👥 Personal</span><span class="tab" data-t="g">🏠 Gebäude</span>${AN('rechner') ? '<span class="tab" data-t="r">🧮 Rechner</span>' : ''}<span class="x" title="Schließen">✕</span></div>
         <div class="tools"><input class="q" placeholder="Suchen: Name, Ausbildung, Wache, Fahrzeug …"><select class="aus"></select></div>
         <div class="info"></div><div class="list"></div>
         <div class="rech"><div class="tools"><input class="rq q2" placeholder="Fahrzeug suchen … (z.B. NEF, HLF 20, ELW 2)"></div><div class="treffer"></div><div class="auswahl"></div><div class="erg"></div></div>`;
@@ -738,6 +776,6 @@
   }
 
   const mm = location.pathname.match(/^\/missions\/(\d+)/);
-  if (mm) missionWindow(mm[1]);
+  if (mm) { if (AN('massnahmen')) missionWindow(mm[1]); }
   else if (location.pathname === '/') mainPage();
 })();
