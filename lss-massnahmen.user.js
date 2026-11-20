@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         LSS Leitstellen-Maßnahmen
 // @namespace    rox88.lss.massnahmen
-// @version      1.2.2
+// @version      1.3.0
 // @description  Realistische Zusatzaufgaben für Einsätze (Stadtwerke, Bauhof, Bahn, Behörden …) zum Abarbeiten per Anruf/Funk, dazu Personal- und Gebäudesuche, Personalrechner und Werbephasen-Warnung. Alarmiert nichts und klickt nichts an.
 // @author       Rox88 (LSS und greasyfork) aka Rox-LSS (Github)
 // @license      MIT
@@ -47,6 +47,7 @@
     personalPanel: 'ja',   // Button „👥 Personal & Wachen“ neben „Ort suchen…“
     rechner:       'ja',   // Reiter „🧮 Rechner“ im Panel
     werbeWarnung:  'ja',   // Warnung, wenn eine Wache unter Personalziel ist und keine Werbephase läuft
+    aaoProtokoll:  'ja',   // merkt sich alte AAO-Werte beim Speichern, damit du sie wieder eintragen kannst
   };
   const AN = k => /^(yes|ja|j|y|true|an|on|1)$/i.test(String(FUNKTIONEN[k]).trim());
 
@@ -691,7 +692,22 @@
     else h1.insertAdjacentElement('afterend', panel);
     const busy = new Set();
     // Änderung an einer Aufgabe: frisch lesen, ändern, sofort schreiben
-    const change = (i, fn) => { const m = getM(id); if (!m || !m.t[i]) return; if (fn(m.t[i]) !== false) setM(id, m); };
+    // merkt sich vorher den alten Stand (für ↶ Rückgängig) und zählt Erledigtes mit
+    const change = (i, fn) => {
+      const m = getM(id); if (!m || !m.t[i]) return;
+      const vorher = JSON.parse(JSON.stringify(m.t[i]));
+      if (fn(m.t[i]) === false) return;
+      m.h = (m.h || []).concat([{ i, v: vorher }]).slice(-20);
+      if (m.t[i].s === 1 && vorher.s !== 1) incr('ok', 1);
+      setM(id, m);
+    };
+    const rueckgaengig = () => {
+      const m = getM(id); if (!m || !m.h || !m.h.length) return;
+      const { i, v } = m.h.pop();
+      if (m.t[i] && m.t[i].s === 1 && v.s !== 1) incr('ok', -1);
+      m.t[i] = v;
+      setM(id, m);
+    };
 
     function render() {
       const m = getM(id);
@@ -706,16 +722,16 @@
         else if (x.s === 2) info += `<div class="ans">⏳ Rückmeldung erwartet ca. ${fmt(x.due)}</div>`;
         return `<div class="lssmz-row ${x.s === 1 ? 'lssmz-done' : ''}"><div class="txt">${icon} <b>${esc(d.t)}</b>${info}</div>${btn}</div>`;
       }).join('');
-      panel.innerHTML = `<h4><span>📋 Weitere Maßnahmen</span><span>${offen(m)} offen</span></h4>${rows}`;
+      const undo = `<button class="btn btn-xs btn-default" data-undo="1" title="Letzten Schritt rückgängig machen" ${m.h && m.h.length && !busy.size ? '' : 'disabled'}>↶</button>`;
+      panel.innerHTML = `<h4><span>📋 Weitere Maßnahmen</span><span>${undo} ${offen(m)} offen</span></h4>${rows}`;
     }
 
     panel.addEventListener('click', e => {
       const b = e.target.closest('button'); if (!b) return;
       e.preventDefault();
+      if (b.dataset.undo) { if (!busy.size) rueckgaengig(); return render(); }
       if (b.dataset.q !== undefined) {
-        let ok = false;
-        change(+b.dataset.q, x => { if (!ready(x)) return false; x.s = 1; ok = true; });
-        if (ok) incr('ok', 1);
+        change(+b.dataset.q, x => { if (!ready(x)) return false; x.s = 1; });
         return render();
       }
       const i = +b.dataset.i; const m = getM(id); if (!m) return;
@@ -724,15 +740,13 @@
       setTimeout(() => {
         busy.delete(i);
         const besetzt = d.m === 'call' && Math.random() < CFG.besetztChance;
-        let ok = false;
         change(i, x => {
           if (x.s !== 0) return false;
           if (besetzt) { x.ans = `${d.w}: ${pick(BESETZT, Math.random)}`; return; }
           x.ans = `${d.w}: ${pick(d.a, Math.random)}`;
           if (d.f) { x.s = 2; x.fu = `${d.w}: ${d.f[0]}`; x.due = Date.now() + 1000 * (CFG.rueckmeldungMin + Math.random() * (CFG.rueckmeldungMax - CFG.rueckmeldungMin)); x.ans = x.ans.replace(/\d+ Minuten/, Math.round((x.due - Date.now()) / 60000) + ' Minuten'); }
-          else { x.s = 1; ok = true; }
+          else { x.s = 1; }
         });
-        if (ok) incr('ok', 1);
         render();
       }, 1500 + Math.random() * 3500);
     });
@@ -1087,7 +1101,85 @@
     };
   }
 
+  /* ------------------------------------------------------------------
+   * AAO-PROTOKOLL: alte Werte merken und wieder eintragen
+   * ------------------------------------------------------------------ */
+  function aaoFelder(form) {
+    const out = {};
+    form.querySelectorAll('[name^="aao["]').forEach(el => {
+      if (el.type === 'hidden' || el.type === 'submit') return;
+      let v;
+      if (el.type === 'checkbox') v = el.checked ? '1' : '0';
+      else if (el.multiple) v = [...el.selectedOptions].map(o => o.value).join(',');
+      else v = el.value;
+      out[el.name] = v;
+    });
+    return out;
+  }
+  function aaoLabel(form, name) {
+    const el = form.querySelector(`[name="${name}"]:not([type=hidden])`);
+    const l = el && el.id && form.querySelector(`label[for="${el.id}"]`);
+    return l ? l.textContent.replace(/^\*\s*/, '').trim() : name.replace(/^aao\[/, '').replace(/\](\[\])?$/, '');
+  }
+  function aaoSetzen(form, werte) {
+    for (const [name, v] of Object.entries(werte)) {
+      const el = form.querySelector(`[name="${name}"]:not([type=hidden])`); if (!el) continue;
+      if (el.type === 'checkbox') el.checked = v === '1';
+      else if (el.multiple) { const set = new Set(String(v).split(',')); [...el.options].forEach(o => { o.selected = set.has(o.value); }); }
+      else el.value = v;
+      el.dispatchEvent(new Event('change', { bubbles: true }));
+      el.style.outline = '2px solid #c9a227';
+    }
+  }
+
+  function aaoEdit(id) {
+    const form = document.querySelector(`form[action="/aaos/${id}"]`); if (!form) return;
+    addCss();
+    const start = aaoFelder(form);
+    form.addEventListener('submit', () => {
+      const neu = aaoFelder(form), alt = {}, jetzt = {};
+      for (const k of Object.keys(neu)) if (neu[k] !== start[k]) { alt[k] = start[k]; jetzt[k] = neu[k]; }
+      if (!Object.keys(alt).length) return;
+      const h = getJ('aao', []);
+      h.push({ id, n: neu['aao[caption]'] || start['aao[caption]'] || '', t: Date.now(), alt, neu: jetzt });
+      setJ('aao', h.slice(-100));
+    });
+    const eintraege = getJ('aao', []).filter(x => x.id === id).reverse();
+    if (!eintraege.length) return;
+    const box = document.createElement('div');
+    box.className = 'lssmz-panel';
+    box.innerHTML = `<h4><span>🕘 Frühere Stände dieser AAO</span><span>${eintraege.length}</span></h4>` + eintraege.slice(0, 10).map((x, i) => {
+      const keys = Object.keys(x.alt);
+      const liste = keys.slice(0, 8).map(k => `${esc(aaoLabel(form, k))}: <b>${esc(x.alt[k])}</b> → ${esc(x.neu[k])}`).join(' · ') + (keys.length > 8 ? ` · … +${keys.length - 8}` : '');
+      return `<div class="lssmz-row"><div class="txt"><b>${new Date(x.t).toLocaleString('de-DE', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</b><div class="ans">${liste}</div></div>
+        <button class="btn btn-xs btn-warning" data-aao="${i}" title="Trägt die alten Werte ins Formular ein – speichern musst du selbst">↶ Alte Werte eintragen</button></div>`;
+    }).join('');
+    form.insertAdjacentElement('beforebegin', box);
+    box.addEventListener('click', e => {
+      const b = e.target.closest('[data-aao]'); if (!b) return;
+      e.preventDefault();
+      aaoSetzen(form, eintraege[+b.dataset.aao].alt);
+      b.textContent = '✔ Eingetragen – jetzt unten speichern';
+      b.className = 'btn btn-xs btn-success';
+    });
+  }
+
+  function aaoListe() {
+    const h = getJ('aao', []); if (!h.length) return;
+    const ziel = document.querySelector('#iframe-inside-container, .container-fluid, body'); if (!ziel) return;
+    addCss();
+    const box = document.createElement('div');
+    box.className = 'lssmz-panel';
+    box.innerHTML = `<h4><span>🕘 Zuletzt geänderte AAOs</span><span>${h.length}</span></h4>` + h.slice(-10).reverse().map(x =>
+      `<div class="lssmz-row"><div class="txt"><b>${esc(x.n)}</b> <span class="ans">${new Date(x.t).toLocaleString('de-DE', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })} · ${Object.keys(x.alt).length} Feld(er) geändert</span></div>
+      <a class="btn btn-xs btn-default" href="/aaos/${x.id}/edit">Öffnen</a></div>`).join('');
+    ziel.insertAdjacentElement('afterbegin', box);
+  }
+
   const mm = location.pathname.match(/^\/missions\/(\d+)/);
+  const ma = location.pathname.match(/^\/aaos\/(\d+)\/edit/);
   if (mm) { if (AN('massnahmen')) missionWindow(mm[1]); }
+  else if (ma) { if (AN('aaoProtokoll')) aaoEdit(ma[1]); }
+  else if (location.pathname === '/aaos') { if (AN('aaoProtokoll')) aaoListe(); }
   else if (location.pathname === '/') mainPage();
 })();
