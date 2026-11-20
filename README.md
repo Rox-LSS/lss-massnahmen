@@ -47,4 +47,4 @@ Ganz oben im Script unter `CFG`:
 - Die Einstelldauer im Rechner ist die schnellstmögliche (laut Spiel max. 1 Person pro Nacht bei aktiver Werbephase).
 - Feedback, Fehler und Ideen für neue Maßnahmen gerne als **Issue** hier auf GitHub!
 
-Copyright (c) 2026 Rox88(LSS und greasyfork) aka Rox-LSS (Github) · Lizenz: MIT
+Copyright (c) 2026 Rox88 (LSS und greasyfork) aka Rox-LSS (Github) · Lizenz: MIT
