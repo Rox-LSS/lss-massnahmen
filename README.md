@@ -35,9 +35,10 @@ Das Script **alarmiert nichts, kauft nichts und klickt nichts für dich**. Es ze
 - Merkt sich beim Speichern einer AAO die alten Werte
 - Auf der Bearbeitungsseite: „Frühere Stände dieser AAO“ mit allen Änderungen (alt → neu) und Button **↶ Alte Werte eintragen** – speichern tust du selbst
 - Auf der AAO-Übersicht: Liste der zuletzt geänderten AAOs
+- Angezeigt werden die letzten 5 Einträge (im ⚙️-Fenster von 1 bis 20 einstellbar)
 
 ### ⚙️ Einstellungsfenster
-- Button **⚙️** neben „👥 Personal & Wachen“: alle Funktionen an/aus, Größe, Rückmeldezeit, „besetzt“-Chance, Werbe-Erinnerung
+- Button **⚙️** neben „👥 Personal & Wachen“: alle Funktionen an/aus, Größe, Rückmeldezeit, „besetzt“-Chance, Werbe-Erinnerung, Anzahl der Einträge im AAO-Protokoll
 - Wird im Browser gespeichert und bleibt bei Updates erhalten
 
 ### 🩹 Verletzte in der Einsatzliste
@@ -47,6 +48,7 @@ Das Script **alarmiert nichts, kauft nichts und klickt nichts für dich**. Es ze
 ### 🚫 AAO: Fahrzeug nicht vorhanden
 - AAOs, die ein Fahrzeug brauchen, das du gar nicht besitzt, bekommen 🚫 statt ✔/✖ und werden blasser
 - Passt sich automatisch an, wenn du neue Fahrzeugtypen kaufst
+- Zeigt das Spiel den grünen Haken (Fahrzeug verfügbar), verschwindet das 🚫 automatisch
 
 ## Funktionen an/aus
 Ganz oben im Script unter `FUNKTIONEN` kannst du jede Funktion mit `'ja'` oder `'nein'` ein- oder ausschalten: `massnahmen`, `abzeichen`, `meldungen`, `statistik`, `personalPanel`, `rechner`, `werbeWarnung`, `aaoProtokoll`, `verletzte`, `aaoFehlt`. Bequemer geht's über das ⚙️-Einstellungsfenster. Danach speichern und das Spiel neu laden.
