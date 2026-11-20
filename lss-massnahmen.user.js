@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         LSS Leitstellen-Maßnahmen
 // @namespace    rox88.lss.massnahmen
-// @version      1.2.0
+// @version      1.2.1
 // @description  Realistische Zusatzaufgaben für Einsätze (Stadtwerke, Bauhof, Bahn, Behörden …) zum Abarbeiten per Anruf/Funk, dazu Personal- und Gebäudesuche, Personalrechner und Werbephasen-Warnung. Alarmiert nichts und klickt nichts an.
 // @author       Rox88 (LSS und greasyfork) aka Rox-LSS (Github)
 // @license      MIT
@@ -36,17 +36,17 @@
   'use strict';
 
   /* ==================================================================
-   * FUNKTIONEN AN / AUS   →   'yes' = an,  'no' = aus
+   * FUNKTIONEN AN / AUS   →   'ja' = an,  'nein' = aus
    * Danach speichern (Strg+S) und das Spiel neu laden (F5).
    * ================================================================== */
   const FUNKTIONEN = {
-    massnahmen:    'yes',  // Zusatzaufgaben im Einsatzfenster (Anrufen/Funken, Rückmeldungen)
-    abzeichen:     'yes',  // farbige Abzeichen 📋 in der Einsatzliste
-    meldungen:     'yes',  // Meldungen unten rechts (Rückmeldungen, vergessene Maßnahmen)
-    statistik:     'yes',  // Zähler unten links (offen / erledigt / vergessen)
-    personalPanel: 'yes',  // Button „👥 Personal & Wachen“ neben „Ort suchen…“
-    rechner:       'yes',  // Reiter „🧮 Rechner“ im Panel
-    werbeWarnung:  'yes',  // Warnung, wenn eine Wache unter Personalziel ist und keine Werbephase läuft
+    massnahmen:    'ja',   // Zusatzaufgaben im Einsatzfenster (Anrufen/Funken, Rückmeldungen)
+    abzeichen:     'ja',   // farbige Abzeichen 📋 in der Einsatzliste
+    meldungen:     'ja',   // Meldungen unten rechts (Rückmeldungen, vergessene Maßnahmen)
+    statistik:     'ja',   // Zähler unten links (offen / erledigt / vergessen)
+    personalPanel: 'ja',   // Button „👥 Personal & Wachen“ neben „Ort suchen…“
+    rechner:       'ja',   // Reiter „🧮 Rechner“ im Panel
+    werbeWarnung:  'ja',   // Warnung, wenn eine Wache unter Personalziel ist und keine Werbephase läuft
   };
   const AN = k => /^(yes|ja|j|y|true|an|on|1)$/i.test(String(FUNKTIONEN[k]).trim());
 
