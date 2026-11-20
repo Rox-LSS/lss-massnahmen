@@ -1,9 +1,9 @@
 // ==UserScript==
 // @name         LSS Leitstellen-Maßnahmen
 // @namespace    rox88.lss.massnahmen
-// @version      1.4.0
+// @version      1.4.1
 // @description  Realistische Zusatzaufgaben für Einsätze (Stadtwerke, Bauhof, Bahn, Behörden …) zum Abarbeiten per Anruf/Funk, dazu Personal- und Gebäudesuche, Personalrechner und Werbephasen-Warnung. Alarmiert nichts und klickt nichts an.
-// @author       Rox88 (LSS und greasyfork) aka Rox-LSS (Github)
+// @author       Rox88(LSS und greasyfork) aka Rox-LSS (Github)
 // @license      MIT
 // @match        https://www.leitstellenspiel.de/*
 // @grant        none
@@ -63,6 +63,7 @@
     rueckmeldungMax: 300,     // … und spätestens nach … Sekunden
     personalCacheMin: 30,     // Personal-Liste so viele Minuten zwischenspeichern
     werbeWarnAlleMin: 60,     // so oft (Minuten) die Warnung erneut als Meldung zeigen
+    aaoAnzeige: 5,            // AAO-Protokoll: so viele frühere Stände bzw. geänderte AAOs anzeigen
     scanIntervall: 5000,      // ms – wie oft die Einsatzliste geprüft wird
     abschlussNachScans: 3,    // so oft muss ein Einsatz fehlen, bis er als beendet gilt
   };
@@ -412,7 +413,7 @@
           'Danke, alle Zapfsäulen sind außer Betrieb.',
         ] },
     ]},
-    { re: /schule|kita|kindergarten|\bhort\b|internat/i, tasks: [
+    { re: /^(?=.*(schule|kita|kindergarten|\bhort\b|internat))(?=.*(brand|feuer|rauch|gas|geruch|bomb|amok|explosion|chemikal|räum|evakuier))/i, tasks: [
       { k: 'schulleitung', t: 'Schulleitung / Träger informieren', w: 'Schulleitung', m: 'call',
         a: [
           'Wir sammeln die Kinder am Sammelplatz, die Lehrer zählen durch.',
@@ -1161,6 +1162,7 @@
       <div class="zeile">Rückmeldung spätestens nach (Minuten) ${zahl('rueckmeldungMax', 60, 0.5, 120, 0.5)}</div>
       <div class="zeile">Chance „besetzt“ beim Anruf (%) ${zahl('besetztChance', 0.01, 0, 90, 1)}</div>
       <div class="zeile">Werbephasen-Warnung wiederholen alle (Minuten) ${zahl('werbeWarnAlleMin', 1, 5, 1440, 5)}</div>
+      <div class="zeile">AAO-Protokoll: angezeigte Einträge ${zahl('aaoAnzeige', 1, 1, 20, 1)}</div>
       <div class="knoepfe"><button class="btn btn-default btn-sm" data-a="std">Auf Standard zurücksetzen</button>
       <button class="btn btn-default btn-sm" data-a="x">Abbrechen</button>
       <button class="btn btn-success btn-sm" data-a="ok">Speichern & neu laden</button></div></div>`;
@@ -1253,10 +1255,14 @@
     });
     setJ('caps', caps);
     let fz;
-    try { fz = await api('aVehicles', '/api/vehicles'); } catch (e) { return; }
+    // eigener Cache-Name: fremde Scripte legen unter „aVehicles“ teils unvollständige Listen ab
+    try { fz = await api('lssmz_fz', '/api/vehicles'); } catch (e) { return; }
+    if (!Array.isArray(fz) || !fz.length) return;
     const typen = [...new Set(fz.map(v => String(v.vehicle_type)))];
     if (typen.some(t => !caps[t])) return; // noch nicht alle eigenen Typen bekannt → lieber nichts falsch markieren
     const habe = new Set(); typen.forEach(t => caps[t].forEach(c => habe.add(c)));
+    // was gerade frei im Fenster steht, hast du auf jeden Fall
+    document.querySelectorAll('input.vehicle_checkbox').forEach(cb => (caps[cb.getAttribute('vehicle_type_id')] || []).forEach(c => habe.add(c)));
     const hat = atom => habe.has(atom) || habe.has(atom + '_only') || habe.has('only_' + atom) || habe.has(atom.replace(/_only$/, ''));
     const erfuellbar = feld => feld.split('_or_').some(alt => alt.split('_and_').every(hat)) || hat(feld);
     document.querySelectorAll('a.aao_btn[aao_id]').forEach(a => {
@@ -1266,6 +1272,17 @@
       a.title = (a.getAttribute('search_attribute') || '') + ' – 🚫 Fahrzeug nicht vorhanden';
       if (!a.querySelector('.lssmz-no')) { const sp = document.createElement('span'); sp.className = 'lssmz-no'; sp.textContent = '🚫 '; a.insertAdjacentElement('afterbegin', sp); }
     });
+    // Sicherheitsnetz: meldet das Spiel den Button als verfügbar (grüner Haken), kommt das 🚫 wieder weg
+    const pruefe = () => document.querySelectorAll('a.aao_btn.lssmz-fehlt').forEach(a => {
+      const l = document.getElementById('available_aao_' + a.getAttribute('aao_id'));
+      if (!l || !(l.classList.contains('label-success') || /✔|✓/.test(l.textContent))) return;
+      a.classList.remove('lssmz-fehlt'); a.title = a.getAttribute('search_attribute') || '';
+      a.querySelectorAll('.lssmz-no').forEach(x => x.remove());
+    });
+    pruefe(); [500, 1500, 4000].forEach(ms => setTimeout(pruefe, ms));
+    const box = document.querySelector('a.aao_btn[aao_id]');
+    const wurzel = box && (box.closest('#mission-aao-group, .tab-content, form') || document.body);
+    if (wurzel) new MutationObserver(pruefe).observe(wurzel, { subtree: true, childList: true, attributes: true, attributeFilter: ['class'] });
   }
 
   /* ------------------------------------------------------------------
@@ -1315,7 +1332,7 @@
     if (!eintraege.length) return;
     const box = document.createElement('div');
     box.className = 'lssmz-panel';
-    box.innerHTML = `<h4><span>🕘 Frühere Stände dieser AAO</span><span>${eintraege.length}</span></h4>` + eintraege.slice(0, 10).map((x, i) => {
+    box.innerHTML = `<h4><span>🕘 Frühere Stände dieser AAO</span><span>${eintraege.length}</span></h4>` + eintraege.slice(0, CFG.aaoAnzeige).map((x, i) => {
       const keys = Object.keys(x.alt);
       const liste = keys.slice(0, 8).map(k => `${esc(aaoLabel(form, k))}: <b>${esc(x.alt[k])}</b> → ${esc(x.neu[k])}`).join(' · ') + (keys.length > 8 ? ` · … +${keys.length - 8}` : '');
       return `<div class="lssmz-row"><div class="txt"><b>${new Date(x.t).toLocaleString('de-DE', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</b><div class="ans">${liste}</div></div>
@@ -1337,7 +1354,7 @@
     addCss();
     const box = document.createElement('div');
     box.className = 'lssmz-panel';
-    box.innerHTML = `<h4><span>🕘 Zuletzt geänderte AAOs</span><span>${h.length}</span></h4>` + h.slice(-10).reverse().map(x =>
+    box.innerHTML = `<h4><span>🕘 Zuletzt geänderte AAOs</span><span>${h.length}</span></h4>` + h.slice(-CFG.aaoAnzeige).reverse().map(x =>
       `<div class="lssmz-row"><div class="txt"><b>${esc(x.n)}</b> <span class="ans">${new Date(x.t).toLocaleString('de-DE', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })} · ${Object.keys(x.alt).length} Feld(er) geändert</span></div>
       <a class="btn btn-xs btn-default" href="/aaos/${x.id}/edit">Öffnen</a></div>`).join('');
     ziel.insertAdjacentElement('afterbegin', box);
