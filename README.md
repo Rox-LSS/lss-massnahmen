@@ -11,6 +11,7 @@ Das Script **alarmiert nichts, kauft nichts und klickt nichts für dich**. Es ze
 - 📞 Anrufen / 📻 Funken – manchmal ist besetzt
 - Rückmeldungen nach einigen Minuten („Abschleppdienst vor Ort“), die du quittieren musst
 - Nur für **eigene** Einsätze, Verbandseinsätze werden ignoriert
+- ↶ **Rückgängig**: Den letzten Schritt in der Maßnahmen-Box zurücknehmen (z. B. versehentlicher Anruf oder Quittieren)
 
 ### 🚦 Farbige Abzeichen in der Einsatzliste
 - 🔴 noch nichts gemacht · 🟡 angefangen · 🔵 Rückmeldung wartet · 🟢 alles erledigt
@@ -30,8 +31,13 @@ Das Script **alarmiert nichts, kauft nichts und klickt nichts für dich**. Es ze
 2. Script installieren: über [Greasy Fork](https://greasyfork.org/de/scripts/606349) oder hier im Repository die Datei `lss-massnahmen.user.js` öffnen → **Raw** → Tampermonkey fragt nach → **Installieren**.
 3. Leitstellenspiel neu laden (F5).
 
+### 🕘 AAO-Protokoll
+- Merkt sich beim Speichern einer AAO die alten Werte
+- Auf der Bearbeitungsseite: „Frühere Stände dieser AAO“ mit allen Änderungen (alt → neu) und Button **↶ Alte Werte eintragen** – speichern tust du selbst
+- Auf der AAO-Übersicht: Liste der zuletzt geänderten AAOs
+
 ## Funktionen an/aus
-Ganz oben im Script unter `FUNKTIONEN` kannst du jede Funktion mit `'ja'` oder `'nein'` ein- oder ausschalten: `massnahmen`, `abzeichen`, `meldungen`, `statistik`, `personalPanel`, `rechner`, `werbeWarnung`. Danach speichern und das Spiel neu laden.
+Ganz oben im Script unter `FUNKTIONEN` kannst du jede Funktion mit `'ja'` oder `'nein'` ein- oder ausschalten: `massnahmen`, `abzeichen`, `meldungen`, `statistik`, `personalPanel`, `rechner`, `werbeWarnung`, `aaoProtokoll`. Danach speichern und das Spiel neu laden.
 
 ## Einstellungen
 Ganz oben im Script unter `CFG`:
