@@ -36,8 +36,20 @@ Das Script **alarmiert nichts, kauft nichts und klickt nichts für dich**. Es ze
 - Auf der Bearbeitungsseite: „Frühere Stände dieser AAO“ mit allen Änderungen (alt → neu) und Button **↶ Alte Werte eintragen** – speichern tust du selbst
 - Auf der AAO-Übersicht: Liste der zuletzt geänderten AAOs
 
+### ⚙️ Einstellungsfenster
+- Button **⚙️** neben „👥 Personal & Wachen“: alle Funktionen an/aus, Größe, Rückmeldezeit, „besetzt“-Chance, Werbe-Erinnerung
+- Wird im Browser gespeichert und bleibt bei Updates erhalten
+
+### 🩹 Verletzte in der Einsatzliste
+- Vor jedem Einsatz: 🩹 garantiert Verletzte · ❔ möglicherweise · ⚪ keine
+- Filter-Buttons zum Aus- und Einblenden der drei Gruppen
+
+### 🚫 AAO: Fahrzeug nicht vorhanden
+- AAOs, die ein Fahrzeug brauchen, das du gar nicht besitzt, bekommen 🚫 statt ✔/✖ und werden blasser
+- Passt sich automatisch an, wenn du neue Fahrzeugtypen kaufst
+
 ## Funktionen an/aus
-Ganz oben im Script unter `FUNKTIONEN` kannst du jede Funktion mit `'ja'` oder `'nein'` ein- oder ausschalten: `massnahmen`, `abzeichen`, `meldungen`, `statistik`, `personalPanel`, `rechner`, `werbeWarnung`, `aaoProtokoll`. Danach speichern und das Spiel neu laden.
+Ganz oben im Script unter `FUNKTIONEN` kannst du jede Funktion mit `'ja'` oder `'nein'` ein- oder ausschalten: `massnahmen`, `abzeichen`, `meldungen`, `statistik`, `personalPanel`, `rechner`, `werbeWarnung`, `aaoProtokoll`, `verletzte`, `aaoFehlt`. Bequemer geht's über das ⚙️-Einstellungsfenster. Danach speichern und das Spiel neu laden.
 
 ## Einstellungen
 Ganz oben im Script unter `CFG`:
