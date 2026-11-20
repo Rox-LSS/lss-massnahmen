@@ -31,7 +31,7 @@ Das Script **alarmiert nichts, kauft nichts und klickt nichts für dich**. Es ze
 3. Leitstellenspiel neu laden (F5).
 
 ## Funktionen an/aus
-Ganz oben im Script unter `FUNKTIONEN` kannst du jede Funktion mit `'yes'` oder `'no'` ein- oder ausschalten: `massnahmen`, `abzeichen`, `meldungen`, `statistik`, `personalPanel`, `rechner`, `werbeWarnung`. Danach speichern und das Spiel neu laden.
+Ganz oben im Script unter `FUNKTIONEN` kannst du jede Funktion mit `'ja'` oder `'nein'` ein- oder ausschalten: `massnahmen`, `abzeichen`, `meldungen`, `statistik`, `personalPanel`, `rechner`, `werbeWarnung`. Danach speichern und das Spiel neu laden.
 
 ## Einstellungen
 Ganz oben im Script unter `CFG`:
