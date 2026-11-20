@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         LSS Leitstellen-Maßnahmen
 // @namespace    rox88.lss.massnahmen
-// @version      1.3.0
+// @version      1.4.0
 // @description  Realistische Zusatzaufgaben für Einsätze (Stadtwerke, Bauhof, Bahn, Behörden …) zum Abarbeiten per Anruf/Funk, dazu Personal- und Gebäudesuche, Personalrechner und Werbephasen-Warnung. Alarmiert nichts und klickt nichts an.
 // @author       Rox88 (LSS und greasyfork) aka Rox-LSS (Github)
 // @license      MIT
@@ -48,6 +48,8 @@
     rechner:       'ja',   // Reiter „🧮 Rechner“ im Panel
     werbeWarnung:  'ja',   // Warnung, wenn eine Wache unter Personalziel ist und keine Werbephase läuft
     aaoProtokoll:  'ja',   // merkt sich alte AAO-Werte beim Speichern, damit du sie wieder eintragen kannst
+    verletzte:     'ja',   // Einsatzliste: 🩹 garantiert / ❔ möglicherweise / ⚪ keine Verletzten + Filter
+    aaoFehlt:      'ja',   // AAO-Buttons mit 🚫, wenn du das Fahrzeug gar nicht besitzt
   };
   const AN = k => /^(yes|ja|j|y|true|an|on|1)$/i.test(String(FUNKTIONEN[k]).trim());
 
@@ -64,6 +66,15 @@
     scanIntervall: 5000,      // ms – wie oft die Einsatzliste geprüft wird
     abschlussNachScans: 3,    // so oft muss ein Einsatz fehlen, bis er als beendet gilt
   };
+
+  // Werte aus dem ⚙️-Einstellungsfenster (im Browser gespeichert) haben Vorrang vor den Werten oben.
+  // So bleiben deine Einstellungen auch nach einem Update erhalten.
+  const STANDARD = { funktionen: { ...FUNKTIONEN }, cfg: { ...CFG } };
+  try {
+    const e = JSON.parse(localStorage.getItem('lssmz_einst') || '{}');
+    Object.assign(FUNKTIONEN, e.funktionen || {});
+    Object.assign(CFG, e.cfg || {});
+  } catch (e) {}
 
   /* ------------------------------------------------------------------
    * REGELN
@@ -663,6 +674,24 @@
     #lssmz-pp .tag{display:inline-block;background:#444;border-radius:3px;padding:0 4px;margin:1px 2px 0 0;font-size:11px}
     #lssmz-pp .go{cursor:pointer;background:#c9a227;color:#000;border:0;border-radius:4px;padding:2px 8px;font-weight:bold}
     #lssmz-pp a{color:#f0c040}
+    #lssmz-set{position:fixed;inset:0;z-index:100001;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center}
+    #lssmz-set .box{background:#2b2b2b;color:#eee;border:1px solid #c9a227;border-radius:6px;width:520px;max-width:95vw;max-height:85vh;overflow:auto;padding:12px 16px;font-size:13px;zoom:var(--lssmz-zoom,1)}
+    #lssmz-set h3{margin:0 0 8px;font-size:17px;color:#f0c040}
+    #lssmz-set h4{margin:12px 0 4px;font-size:14px;border-bottom:1px solid #444;padding-bottom:3px}
+    #lssmz-set label{display:flex;gap:8px;align-items:center;font-weight:normal;margin:3px 0}
+    #lssmz-set .zeile{display:flex;justify-content:space-between;align-items:center;gap:8px;margin:4px 0}
+    #lssmz-set input[type=number]{width:80px;background:#1e1e1e;color:#eee;border:1px solid #555;border-radius:4px;padding:2px 6px}
+    #lssmz-set .knoepfe{display:flex;gap:8px;justify-content:flex-end;margin-top:12px}
+    #lssmz-setbtn{margin:8px 0 0 4px}
+    .lssmz-v{display:inline-block;margin-right:3px;cursor:default}
+    #lssmz-vfilter{display:flex;gap:4px;align-items:center;margin:4px 0;flex-wrap:wrap;font-size:12px}
+    #lssmz-vfilter button{padding:1px 7px}
+    #lssmz-vfilter button.aus{opacity:.35;text-decoration:line-through}
+    body.lssmz-v-g-aus .missionSideBarEntry[data-lssmz-v="g"],
+    body.lssmz-v-m-aus .missionSideBarEntry[data-lssmz-v="m"],
+    body.lssmz-v-k-aus .missionSideBarEntry[data-lssmz-v="k"]{display:none!important}
+    a.aao_btn.lssmz-fehlt{opacity:.45}
+    a.aao_btn.lssmz-fehlt .label{display:none}
     #lssmz-pp .rech{display:none;flex-direction:column;overflow:auto;flex:1;border-top:1px solid #444}
     #lssmz-pp .rech .box{padding:8px;border-bottom:1px solid #383838}
     #lssmz-pp .rech .h{font-weight:bold;color:#f0c040;margin-bottom:4px}
@@ -670,7 +699,7 @@
     #lssmz-pp .sb{background:#444;color:#eee;border:0;border-radius:3px;padding:0 7px;margin-left:2px;cursor:pointer}
     #lssmz-pp .ok{color:#5cb85c}#lssmz-pp .mid{color:#f0ad4e}#lssmz-pp .bad{color:#ff6b6b}`;
   const addCss = () => { if (document.getElementById('lssmz-css')) return; const s = document.createElement('style'); s.id = 'lssmz-css'; s.textContent = css + `
-    .lssmz-panel,.lssmz-badge,.lssmz-toast,#lssmz-stats,#lssmz-pp{zoom:${CFG.zoom}}`; document.head.appendChild(s); };
+    .lssmz-panel,.lssmz-badge,.lssmz-toast,#lssmz-stats,#lssmz-pp,#lssmz-set .box{zoom:${CFG.zoom}}`; document.head.appendChild(s); };
   const fmt = ts => new Date(ts).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
   const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
@@ -833,6 +862,8 @@
     zeigeStats();
     let panel = null;
     if (AN('personalPanel')) try { panel = personalPanel(); } catch (e) { console.warn('[LSS-Maßnahmen] Panel', e); }
+    try { einstellButton(); } catch (e) {}
+    if (AN('verletzte')) verletzte().catch(() => {});
     let werbeIds = [];
     const zeigeWerbung = () => { if (panel) panel.oeffne('g', true); else if (werbeIds[0] && typeof window.lightboxOpen === 'function') window.lightboxOpen(`/buildings/${werbeIds[0]}/hire`); };
     stats.addEventListener('click', e => { if (e.target.closest('.lssmz-wb')) zeigeWerbung(); });
@@ -1102,6 +1133,142 @@
   }
 
   /* ------------------------------------------------------------------
+   * ⚙️ EINSTELLUNGSFENSTER
+   * ------------------------------------------------------------------ */
+  const FUNK_TEXT = {
+    massnahmen: 'Zusatzaufgaben im Einsatzfenster',
+    abzeichen: 'Farbige Abzeichen in der Einsatzliste',
+    meldungen: 'Meldungen unten rechts',
+    statistik: 'Zähler unten links',
+    personalPanel: 'Button „👥 Personal & Wachen“',
+    rechner: 'Reiter „🧮 Rechner“ im Panel',
+    werbeWarnung: 'Werbephasen-Warnung',
+    aaoProtokoll: 'AAO-Protokoll (alte Werte merken)',
+    verletzte: 'Einsatzliste: Verletzte 🩹 / ❔ / ⚪ mit Filter',
+    aaoFehlt: 'AAO: 🚫 bei Fahrzeugen, die du nicht hast',
+  };
+  function einstellungen() {
+    if (document.getElementById('lssmz-set')) return;
+    addCss();
+    const ov = document.createElement('div'); ov.id = 'lssmz-set';
+    const an = k => AN(k) ? 'checked' : '';
+    const zahl = (k, faktor, min, max, step) => `<input type="number" data-cfg="${k}" data-f="${faktor}" min="${min}" max="${max}" step="${step}" value="${+(CFG[k] / faktor).toFixed(2)}">`;
+    ov.innerHTML = `<div class="box"><h3>⚙️ LSS Leitstellen-Maßnahmen – Einstellungen</h3>
+      <h4>Funktionen</h4>${Object.keys(FUNK_TEXT).map(k => `<label><input type="checkbox" data-fn="${k}" ${an(k)}> ${FUNK_TEXT[k]}</label>`).join('')}
+      <h4>Anzeige & Spiel</h4>
+      <div class="zeile">Größe (1 = normal, 1.3 = 130 %) ${zahl('zoom', 1, 0.7, 2.5, 0.1)}</div>
+      <div class="zeile">Rückmeldung frühestens nach (Minuten) ${zahl('rueckmeldungMin', 60, 0.5, 60, 0.5)}</div>
+      <div class="zeile">Rückmeldung spätestens nach (Minuten) ${zahl('rueckmeldungMax', 60, 0.5, 120, 0.5)}</div>
+      <div class="zeile">Chance „besetzt“ beim Anruf (%) ${zahl('besetztChance', 0.01, 0, 90, 1)}</div>
+      <div class="zeile">Werbephasen-Warnung wiederholen alle (Minuten) ${zahl('werbeWarnAlleMin', 1, 5, 1440, 5)}</div>
+      <div class="knoepfe"><button class="btn btn-default btn-sm" data-a="std">Auf Standard zurücksetzen</button>
+      <button class="btn btn-default btn-sm" data-a="x">Abbrechen</button>
+      <button class="btn btn-success btn-sm" data-a="ok">Speichern & neu laden</button></div></div>`;
+    document.body.appendChild(ov);
+    ov.addEventListener('click', e => {
+      if (e.target === ov) return ov.remove();
+      const a = e.target.dataset && e.target.dataset.a; if (!a) return;
+      if (a === 'x') return ov.remove();
+      if (a === 'std') { if (confirm('Alle Einstellungen auf Standard zurücksetzen?')) { localStorage.removeItem('lssmz_einst'); location.reload(); } return; }
+      const fn = {}, cfg = {};
+      ov.querySelectorAll('[data-fn]').forEach(i => { fn[i.dataset.fn] = i.checked ? 'ja' : 'nein'; });
+      ov.querySelectorAll('[data-cfg]').forEach(i => { const v = parseFloat(String(i.value).replace(',', '.')); if (!isNaN(v)) cfg[i.dataset.cfg] = Math.round(v * parseFloat(i.dataset.f) * 1000) / 1000; });
+      if (cfg.rueckmeldungMax < cfg.rueckmeldungMin) cfg.rueckmeldungMax = cfg.rueckmeldungMin;
+      localStorage.setItem('lssmz_einst', JSON.stringify({ funktionen: fn, cfg }));
+      location.reload();
+    });
+  }
+  function einstellButton() {
+    if (document.getElementById('lssmz-setbtn')) return;
+    const nach = document.getElementById('lssmz-ppbtn') || document.getElementById('map_adress_search_form');
+    if (!nach) return;
+    const b = document.createElement('button');
+    b.id = 'lssmz-setbtn'; b.type = 'button'; b.className = 'btn btn-default btn-sm'; b.title = 'Einstellungen LSS Leitstellen-Maßnahmen';
+    b.textContent = '⚙️';
+    b.addEventListener('click', einstellungen);
+    nach.insertAdjacentElement('afterend', b);
+  }
+
+  /* ------------------------------------------------------------------
+   * 🩹 VERLETZTE: Einsatzarten einteilen + Filter
+   * ------------------------------------------------------------------ */
+  const V_TEXT = { g: ['🩹', 'garantiert Verletzte'], m: ['❔', 'möglicherweise Verletzte'], k: ['⚪', 'keine Verletzten'] };
+  async function einsatzarten() {
+    try { const c = JSON.parse(sessionStorage.getItem('lssmz_einsatzarten')); if (c && Date.now() - c.t < 60 * 60000) return c.v; } catch (e) {}
+    const m = await fetch('/einsaetze.json').then(r => r.json());
+    const v = {};
+    m.forEach(x => { const a = x.additional || {}; v[x.id] = (a.possible_patient_min || 0) > 0 ? 'g' : (a.possible_patient || 0) > 0 ? 'm' : 'k'; });
+    try { sessionStorage.setItem('lssmz_einsatzarten', JSON.stringify({ t: Date.now(), v })); } catch (e) {}
+    return v;
+  }
+  async function verletzte() {
+    let arten;
+    try { arten = await einsatzarten(); } catch (e) { return; }
+    addCss();
+    const aus = new Set(getJ('vfilter', []));
+    const setzeKlassen = () => ['g', 'm', 'k'].forEach(c => document.body.classList.toggle(`lssmz-v-${c}-aus`, aus.has(c)));
+    setzeKlassen();
+    const ziel = document.getElementById('mission-filters-block') || document.getElementById('missions-panel-body');
+    if (ziel && !document.getElementById('lssmz-vfilter')) {
+      const bar = document.createElement('div'); bar.id = 'lssmz-vfilter';
+      const male = () => { bar.innerHTML = '<span>Verletzte:</span>' + ['g', 'm', 'k'].map(c => `<button type="button" class="btn btn-xs btn-default ${aus.has(c) ? 'aus' : ''}" data-v="${c}" title="${V_TEXT[c][1]} ein-/ausblenden">${V_TEXT[c][0]} ${V_TEXT[c][1]}</button>`).join(''); };
+      male();
+      bar.addEventListener('click', e => {
+        const b = e.target.closest('[data-v]'); if (!b) return;
+        const c = b.dataset.v; aus.has(c) ? aus.delete(c) : aus.add(c);
+        setJ('vfilter', [...aus]); setzeKlassen(); male();
+      });
+      ziel.insertAdjacentElement(ziel.id === 'mission-filters-block' ? 'afterend' : 'afterbegin', bar);
+    }
+    const markiere = () => {
+      document.querySelectorAll('.missionSideBarEntry').forEach(el => {
+        const typ = parseInt(el.getAttribute('mission_type_id'), 10);
+        const c = arten[typ]; if (!c) return;
+        if (el.dataset.lssmzV !== c) el.dataset.lssmzV = c;
+        const id = el.getAttribute('mission_id');
+        const cap = document.getElementById('mission_caption_' + id);
+        if (cap && !(cap.previousElementSibling && cap.previousElementSibling.classList.contains('lssmz-v'))) {
+          const sp = document.createElement('span'); sp.className = 'lssmz-v'; sp.textContent = V_TEXT[c][0]; sp.title = V_TEXT[c][1];
+          cap.insertAdjacentElement('beforebegin', sp);
+        }
+      });
+    };
+    markiere();
+    setInterval(markiere, 3000);
+  }
+
+  /* ------------------------------------------------------------------
+   * 🚫 AAO: Fahrzeug gar nicht vorhanden
+   * ------------------------------------------------------------------ */
+  const FZ_META = /^(value|class|id|name|type|fms|building_id|tractive_|trailer_vehicle_id|at_staging_area|autocomplete|ignore_aao|vehicle_type_ignore_default_aao|custom_|vehicle_type_id|possible_tractive|data-|checked|style)/;
+  const AAO_META = /^(search_attribute|title|accesskey|href|style|class|id|aao_id|reset|building_ids|equipment_mode|custom|data-)/;
+  async function aaoFehlt() {
+    // Merkmale pro Fahrzeugtyp aus den Fahrzeugen im Fenster lernen und dauerhaft merken
+    const caps = getJ('caps', {});
+    document.querySelectorAll('input.vehicle_checkbox').forEach(cb => {
+      const t = cb.getAttribute('vehicle_type_id'); if (!t) return;
+      const set = new Set(caps[t] || []);
+      [...cb.attributes].forEach(a => { if (!FZ_META.test(a.name) && parseFloat(a.value) > 0) set.add(a.name); });
+      caps[t] = [...set];
+    });
+    setJ('caps', caps);
+    let fz;
+    try { fz = await api('aVehicles', '/api/vehicles'); } catch (e) { return; }
+    const typen = [...new Set(fz.map(v => String(v.vehicle_type)))];
+    if (typen.some(t => !caps[t])) return; // noch nicht alle eigenen Typen bekannt → lieber nichts falsch markieren
+    const habe = new Set(); typen.forEach(t => caps[t].forEach(c => habe.add(c)));
+    const hat = atom => habe.has(atom) || habe.has(atom + '_only') || habe.has('only_' + atom) || habe.has(atom.replace(/_only$/, ''));
+    const erfuellbar = feld => feld.split('_or_').some(alt => alt.split('_and_').every(hat)) || hat(feld);
+    document.querySelectorAll('a.aao_btn[aao_id]').forEach(a => {
+      const fehlt = [...a.attributes].some(x => !AAO_META.test(x.name) && parseFloat(x.value) > 0 && !erfuellbar(x.name));
+      if (!fehlt) return;
+      a.classList.add('lssmz-fehlt');
+      a.title = (a.getAttribute('search_attribute') || '') + ' – 🚫 Fahrzeug nicht vorhanden';
+      if (!a.querySelector('.lssmz-no')) { const sp = document.createElement('span'); sp.className = 'lssmz-no'; sp.textContent = '🚫 '; a.insertAdjacentElement('afterbegin', sp); }
+    });
+  }
+
+  /* ------------------------------------------------------------------
    * AAO-PROTOKOLL: alte Werte merken und wieder eintragen
    * ------------------------------------------------------------------ */
   function aaoFelder(form) {
@@ -1178,7 +1345,7 @@
 
   const mm = location.pathname.match(/^\/missions\/(\d+)/);
   const ma = location.pathname.match(/^\/aaos\/(\d+)\/edit/);
-  if (mm) { if (AN('massnahmen')) missionWindow(mm[1]); }
+  if (mm) { if (AN('massnahmen')) missionWindow(mm[1]); if (AN('aaoFehlt')) aaoFehlt().catch(() => {}); }
   else if (ma) { if (AN('aaoProtokoll')) aaoEdit(ma[1]); }
   else if (location.pathname === '/aaos') { if (AN('aaoProtokoll')) aaoListe(); }
   else if (location.pathname === '/') mainPage();
