@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         LSS Leitstellen-Maßnahmen
 // @namespace    rox88.lss.massnahmen
-// @version      1.5.0-beta.6
+// @version      1.5.0-beta.7
 // @description  Realistische Zusatzaufgaben für Einsätze (Stadtwerke, Bauhof, Bahn, Behörden …) zum Abarbeiten per Anruf/Funk, dazu Personal- und Gebäudesuche, Personal- und Kostenrechner und Werbephasen-Warnung. Alarmiert nichts und klickt nichts an.
 // @author       Rox88(LSS und greasyfork) aka Rox-LSS (Github)
 // @license      MIT
@@ -599,7 +599,18 @@
   // nicht gegenseitig überschreiben. Zähler liegen getrennt, jeder hat nur einen Schreiber.
   const P = 'lssmz_';
   const getJ = (k, d) => { try { const v = localStorage.getItem(P + k); return v ? JSON.parse(v) : d; } catch (e) { return d; } };
-  const setJ = (k, v) => { try { localStorage.setItem(P + k, JSON.stringify(v)); } catch (e) {} };
+  // Ist der Browserspeicher voll, werden zuerst die großen Zwischenspeicher (Personal-Liste, Preise) gelöscht –
+  // Maßnahmen-Stände sind wichtiger. Klappt es dann immer noch nicht, wird das gemerkt und unten links gewarnt.
+  let speicherVoll = false;
+  const setJ = (k, v) => {
+    const txt = JSON.stringify(v);
+    try { localStorage.setItem(P + k, txt); speicherVoll = false; return true; } catch (e) {}
+    ['pers', 'pers_t', 'vpreis'].forEach(c => { if (c !== k) try { localStorage.removeItem(P + c); } catch (e) {} });
+    try { localStorage.setItem(P + k, txt); speicherVoll = false; return true; } catch (e) {
+      speicherVoll = true; console.warn('[LSS-Maßnahmen] Browserspeicher voll – konnte nicht speichern:', k);
+      return false;
+    }
+  };
   const delJ = k => { try { localStorage.removeItem(P + k); } catch (e) {} };
   const getM = id => getJ('m_' + id, null);
   const setM = (id, m) => setJ('m_' + id, m);
@@ -817,6 +828,8 @@
     };
     let werbeListe = [];                     // Wachen ohne Werbephase
     const absent = {};                       // id -> wie oft nicht in der Liste
+    const seit = {};                         // id -> seit wann nicht in der Liste (ms)
+    const geladenAb = Date.now();            // nach dem Neuladen braucht das Spiel eine Weile, bis die Einsatzliste komplett ist
     const notified = new Set(getJ('n', []));  // bereits gemeldete Rückmeldungen
 
     function scan() {
@@ -827,7 +840,7 @@
       entries.forEach(el => {
         const id = el.getAttribute('mission_id'); if (!id) return;
         if (istVerband(el)) { if (getM(id)) delJ('m_' + id); const b = el.querySelector('.lssmz-badge'); if (b) b.remove(); return; }
-        present.add(id); absent[id] = 0;
+        present.add(id); absent[id] = 0; delete seit[id];
         let name = '';
         try { name = JSON.parse(el.getAttribute('data-sortable-by')).caption || ''; } catch (e) {}
         const cap = document.getElementById('mission_caption_' + id);
@@ -855,9 +868,13 @@
       // Einsätze, die aus der Liste verschwunden sind -> abgeschlossen
       for (const id of allIds()) {
         if (present.has(id)) continue;
+        // Erst nach 90 s Anlaufzeit, und der Einsatz muss mind. 60 s am Stück fehlen – sonst würden Einsätze,
+        // die nach dem Neuladen nur noch nicht in der Liste stehen, gelöscht und als „nicht bearbeitet“ neu angelegt.
+        if (Date.now() - geladenAb < 90000) continue;
         absent[id] = (absent[id] || 0) + 1;
-        if (absent[id] < CFG.abschlussNachScans) continue;
-        const m = getM(id); delJ('m_' + id); delete absent[id];
+        seit[id] = seit[id] || Date.now();
+        if (absent[id] < CFG.abschlussNachScans || Date.now() - seit[id] < 60000) continue;
+        const m = getM(id); delJ('m_' + id); delete absent[id]; delete seit[id];
         if (!m) continue;
         const o = offen(m);
         if (o) { incr('miss', o); msgs.push([`⚠️ ${m.n} beendet – ${o} Maßnahme(n) vergessen!`, null]); }
@@ -871,6 +888,7 @@
     function zeigeStats() {
       const teile = [];
       if (AN('massnahmen')) teile.push(`📋 Maßnahmen – offen: ${letzteOffen} · erledigt: ${getJ('ok', 0)} · vergessen: ${getJ('miss', 0)}`);
+      if (speicherVoll) teile.push('<span style="color:#ff6b6b" title="Der Browserspeicher für leitstellenspiel.de ist voll. Maßnahmen-Stände können nicht gespeichert werden.">⚠️ Speicher voll – Stände werden nicht gespeichert</span>');
       if (werbeListe.length) teile.push(`<span class="lssmz-wb" style="cursor:pointer;color:#f0ad4e" title="${esc(werbeListe.join(', '))}">⚠️ ohne Werbephase: ${werbeListe.length}</span>`);
       stats.innerHTML = teile.join(' · ');
       stats.style.display = AN('statistik') && teile.length ? '' : 'none';
