@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         LSS Leitstellen-Maßnahmen
 // @namespace    rox88.lss.massnahmen
-// @version      1.5.0-beta.5
+// @version      1.5.0-beta.6
 // @description  Realistische Zusatzaufgaben für Einsätze (Stadtwerke, Bauhof, Bahn, Behörden …) zum Abarbeiten per Anruf/Funk, dazu Personal- und Gebäudesuche, Personal- und Kostenrechner und Werbephasen-Warnung. Alarmiert nichts und klickt nichts an.
 // @author       Rox88(LSS und greasyfork) aka Rox-LSS (Github)
 // @license      MIT
@@ -1295,6 +1295,23 @@
         Du musst die Wache mindestens auf <b>Stufe ${sp.noetig}</b> ausbauen.</div>
         <button class="go" data-stufe="${sp.noetig}" style="margin-top:4px">Stufe ${sp.noetig} in die Kosten übernehmen</button></div>`;
     }
+    // Personal: Jede Wachenart startet mit einer festen Zahl Leute (LSS-Manager: startPersonnel), ohne Ausbildungen.
+    // Mehr Leute kommen nur über die Werbephase – höchstens 1 Person pro Nacht.
+    function personalHtml() {
+      const w = lbW(); if (!w || w.startPersonnel == null) return '';
+      let min = 0, voll = 0, n = 0;
+      auswahl.forEach(a => { if (!passtAufWache(a.t)) return; const r = anforderung(a.t); min += r.min * a.n; voll += r.max * a.n; n += a.n; });
+      if (!n) return '';
+      const st = w.startPersonnel || 0, tage = x => x === 1 ? '1 Nacht' : `${x} Nächte`, leute = x => x === 1 ? '1 Person' : `${x} Leute`;
+      const hat = `Eine neue „${esc(w.caption)}“ startet mit <b>${st}</b> Leuten`;
+      const ausb = auswahl.some(a => passtAufWache(a.t) && anforderung(a.t).aus.length) ? ' Das Startpersonal hat keine Lehrgänge – die mit ⚠️ markierten Ausbildungen kommen noch dazu.' : '';
+      if (st >= voll) return `<div class="box sub ok">✅ Personal reicht: ${hat}, deine Fahrzeuge brauchen voll besetzt ${voll}.${ausb}</div>`;
+      if (st >= min) return `<div class="box"><div class="mid">🟡 <b>Personal reicht nur zum Ausrücken:</b> ${hat}, deine Fahrzeuge brauchen mindestens ${min}, voll besetzt ${voll}.
+        Für volle Besetzung musst du noch <b>${leute(voll - st)}</b> einstellen → mit Werbephase mindestens <b>${tage(voll - st)}</b>.${ausb}</div></div>`;
+      return `<div class="box"><div class="warn">⚠️ <b>Zu wenig Personal:</b> ${hat}, deine Fahrzeuge brauchen aber schon zum Ausrücken mindestens <b>${min}</b> (voll besetzt ${voll}).
+        Es fehlen mindestens <b>${leute(min - st)}</b> (voll: ${leute(voll - st)}) → mit Werbephase mindestens <b>${tage(min - st)}</b>, bis alle Fahrzeuge ausrücken können (voll: ${tage(voll - st)}).
+        Bis dahin stehen Fahrzeuge ohne Besatzung herum.${ausb}</div></div>`;
+    }
     function wacheZeichnen() {
       const box = kp.querySelector('.wbox');
       if (!LB) { box.innerHTML = '<div class="box sub">Gebäudedaten (LSS-Manager) nicht erreichbar – Kosten nur für Fahrzeuge.</div>'; return; }
@@ -1364,7 +1381,7 @@
       aw.innerHTML = auswahl.length ? '<div class="box"><div class="h">Fahrzeuge</div>' + auswahl.map((a, i) => `<div class="it">
         <div class="main"><b>${a.n}× ${esc(FZT[a.t].caption)}</b>${hinweise(a.t)}</div>
         <button class="sb" data-dec="${i}">−</button><button class="sb" data-inc="${i}">＋</button><button class="sb" data-rm="${i}">✕</button></div>`).join('') + '</div>' : '';
-      const k = stellplatzHtml() + kostenHtml();
+      const k = stellplatzHtml() + personalHtml() + kostenHtml();
       erg.innerHTML = k || '<div class="box sub">Wähl oben eine Wache und/oder such Fahrzeuge und klick sie an – dann siehst du hier, was alles zusammen kostet (mit laufender Rabattaktion).</div>';
     }
     function mount(box) {
