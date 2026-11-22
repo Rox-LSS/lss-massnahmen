@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         LSS Leitstellen-Maßnahmen
 // @namespace    rox88.lss.massnahmen
-// @version      1.4.1
-// @description  Realistische Zusatzaufgaben für Einsätze (Stadtwerke, Bauhof, Bahn, Behörden …) zum Abarbeiten per Anruf/Funk, dazu Personal- und Gebäudesuche, Personalrechner und Werbephasen-Warnung. Alarmiert nichts und klickt nichts an.
+// @version      1.5.0-beta.1
+// @description  Realistische Zusatzaufgaben für Einsätze (Stadtwerke, Bauhof, Bahn, Behörden …) zum Abarbeiten per Anruf/Funk, dazu Personal- und Gebäudesuche, Personal- und Kostenrechner und Werbephasen-Warnung. Alarmiert nichts und klickt nichts an.
 // @author       Rox88(LSS und greasyfork) aka Rox-LSS (Github)
 // @license      MIT
 // @match        https://www.leitstellenspiel.de/*
@@ -17,7 +17,8 @@
  *
  * Datenquellen:
  *  - eigene Spieldaten über leitstellenspiel.de (/api/buildings, /api/vehicles, Personalseiten der Wachen)
- *  - Fahrzeug- und Lehrgangsdaten von der LSS-Manager-Schnittstelle (api.lss-manager.de)
+ *  - aktuelle Preise inkl. Rabattaktionen direkt vom Spiel (Bauformular /buildings/new, Kaufseiten /buildings/…/vehicles/new)
+ *  - Fahrzeug-, Gebäude- und Lehrgangsdaten von der LSS-Manager-Schnittstelle (api.lss-manager.de)
  * Es werden keine Daten an Dritte gesendet. Spielstände werden nur lokal im Browser gespeichert (localStorage, Präfix „lssmz_“).
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated
@@ -45,7 +46,7 @@
     meldungen:     'ja',   // Meldungen unten rechts (Rückmeldungen, vergessene Maßnahmen)
     statistik:     'ja',   // Zähler unten links (offen / erledigt / vergessen)
     personalPanel: 'ja',   // Button „👥 Personal & Wachen“ neben „Ort suchen…“
-    rechner:       'ja',   // Reiter „🧮 Rechner“ im Panel
+    rechner:       'ja',   // Reiter „🧮 Rechner“ im Panel (Personal, Lehrgänge, Kosten)
     werbeWarnung:  'ja',   // Warnung, wenn eine Wache unter Personalziel ist und keine Werbephase läuft
     aaoProtokoll:  'ja',   // merkt sich alte AAO-Werte beim Speichern, damit du sie wieder eintragen kannst
     verletzte:     'ja',   // Einsatzliste: 🩹 garantiert / ❔ möglicherweise / ⚪ keine Verletzten + Filter
@@ -62,6 +63,7 @@
     rueckmeldungMin: 120,     // Rückmeldung frühestens nach … Sekunden
     rueckmeldungMax: 300,     // … und spätestens nach … Sekunden
     personalCacheMin: 30,     // Personal-Liste so viele Minuten zwischenspeichern
+    preisCacheMin: 30,        // Rechner: Preise vom Server so viele Minuten zwischenspeichern (Rabattaktionen!)
     werbeWarnAlleMin: 60,     // so oft (Minuten) die Warnung erneut als Meldung zeigen
     aaoAnzeige: 5,            // AAO-Protokoll: so viele frühere Stände bzw. geänderte AAOs anzeigen
     scanIntervall: 5000,      // ms – wie oft die Einsatzliste geprüft wird
@@ -698,7 +700,15 @@
     #lssmz-pp .rech .h{font-weight:bold;color:#f0c040;margin-bottom:4px}
     #lssmz-pp .pick{cursor:pointer}
     #lssmz-pp .sb{background:#444;color:#eee;border:0;border-radius:3px;padding:0 7px;margin-left:2px;cursor:pointer}
-    #lssmz-pp .ok{color:#5cb85c}#lssmz-pp .mid{color:#f0ad4e}#lssmz-pp .bad{color:#ff6b6b}`;
+    #lssmz-pp .ok{color:#5cb85c}#lssmz-pp .mid{color:#f0ad4e}#lssmz-pp .bad{color:#ff6b6b}
+    #lssmz-pp .warn{color:#f0ad4e;font-size:12px}
+    #lssmz-pp table.kost{width:100%;border-collapse:collapse;font-size:12px}
+    #lssmz-pp table.kost td{padding:2px 4px;border-bottom:1px solid #383838;vertical-align:top}
+    #lssmz-pp table.kost td.r{text-align:right;white-space:nowrap}
+    #lssmz-pp table.kost tr.sum td{font-weight:bold;border-top:2px solid #c9a227;border-bottom:0}
+    #lssmz-pp .rb{display:inline-block;background:#dc3545;color:#fff;border-radius:3px;padding:0 4px;margin-left:4px;font-size:11px;font-weight:bold}
+    #lssmz-pp .wbox label{display:inline-block;margin:2px 10px 2px 0;font-weight:normal;cursor:pointer}
+    #lssmz-pp .wbox select{max-width:100%}`;
   const addCss = () => { if (document.getElementById('lssmz-css')) return; const s = document.createElement('style'); s.id = 'lssmz-css'; s.textContent = css + `
     .lssmz-panel,.lssmz-badge,.lssmz-toast,#lssmz-stats,#lssmz-pp,#lssmz-set .box{zoom:${CFG.zoom}}`; document.head.appendChild(s); };
   const fmt = ts => new Date(ts).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
@@ -903,15 +913,16 @@
 
   // Wache unter Personalziel, aber keine Werbephase aktiv (und keine automatische Einstellung)?
   const brauchtWerbung = x => (x.personal_count_target || 0) > 0 && (x.personal_count || 0) < x.personal_count_target && !x.hiring_phase && !x.hiring_automatic;
-  let FZT = null, SCH = {};   // Fahrzeugtypen und Lehrgänge (LSSM-Schnittstelle)
+  let FZT = null, SCH = {}, LB = null;   // Fahrzeugtypen, Lehrgänge und Gebäudetypen (LSSM-Schnittstelle)
   async function ladeGebaeude() {
-    const [b, v, t, sc] = await Promise.all([
+    const [b, v, t, sc, lb] = await Promise.all([
       api('aBuildings', '/api/buildings'),
       api('aVehicles', '/api/vehicles'),
       fetch('https://api.lss-manager.de/de_DE/vehicles').then(r => r.json()).catch(() => null),
       fetch('https://api.lss-manager.de/de_DE/schoolings').then(r => r.json()).catch(() => null),
+      fetch('https://api.lss-manager.de/de_DE/buildings').then(r => r.json()).catch(() => null),
     ]);
-    FZT = t;
+    FZT = t; LB = lb;
     if (sc) Object.values(sc).flat().forEach(x => { SCH[x.caption] = { l: x.staffList || x.caption, d: parseInt(x.duration, 10) || 0 }; });
     const fz = {};
     v.forEach(x => {
@@ -974,7 +985,7 @@
       info.style.display = r ? 'none' : '';
       list.style.display = r ? 'none' : '';
       pp.querySelector('.rech').style.display = r ? 'flex' : 'none';
-      if (r) { if (geb) { treffer(); rechnerZeichnen(); } else pp.querySelector('.erg').innerHTML = '<div class="box">Lade Daten …</div>'; return; }
+      if (r) { if (geb) { if (!pp.querySelector('.wsel')) wacheZeichnen(); treffer(); rechnerZeichnen(); preiseNachladen(); } else pp.querySelector('.erg').innerHTML = '<div class="box">Lade Daten …</div>'; return; }
       if (!geb) { list.innerHTML = '<div class="it">Lade Gebäude …</div>'; return; }
       const gm = gebMap();
       if (tab === 'g') {
@@ -1030,6 +1041,140 @@
     const tage = n => n === 1 ? '1 Nacht' : `${n} Nächte`;
     const datum = n => new Date(Date.now() + n * 86400000).toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit' });
 
+    /* ---------- Kosten ---------- */
+    // Preise kommen bevorzugt direkt vom Spiel-Server (dort ist eine laufende Rabattaktion schon eingerechnet).
+    // Nur wenn der Server nichts liefert, wird der Listenpreis der LSS-Manager-Daten genommen.
+    const wache = { bt: '', stufen: 0, ext: {} };   // geplante neue Wache
+    const PREIS = { geb: null, fz: {}, geholt: {}, laedt: false };
+    { const c = getJ('vpreis', null); if (c && Date.now() - c.t < CFG.preisCacheMin * 60000) { PREIS.fz = c.p || {}; (c.bts || []).forEach(b => { PREIS.geholt[b] = true; }); } }
+    const zahlAus = x => parseInt(String(x == null ? '' : x).replace(/\D/g, ''), 10);
+    const cr = n => (n || 0).toLocaleString('de-DE');
+    const dom = t => new DOMParser().parseFromString(t, 'text/html');
+
+    async function gebPreiseLaden() {
+      if (PREIS.geb) return;
+      const out = {};
+      try {
+        const d = dom(await fetch('/buildings/new').then(r => r.text()));
+        d.querySelectorAll('[id^="detail_"]').forEach(el => {
+          const bt = parseInt(el.id.slice(7), 10); if (isNaN(bt)) return;
+          const werte = [...el.querySelectorAll('input[type="submit"],button')].map(b => b.value || b.textContent || '');
+          const c = werte.find(w => /credits/i.test(w)), k = werte.find(w => /coins/i.test(w));
+          const rb = el.querySelector('.building-discount-percent');
+          out[bt] = {
+            c: c ? zahlAus(c) : null, k: k ? zahlAus(k) : null,
+            rabatt: rb ? (zahlAus(rb.textContent) || 0) : 0,
+            start: [...el.querySelectorAll('select[name^="building[start_vehicle"] option')].map(o => o.value).filter(v => v !== ''),
+          };
+        });
+      } catch (e) {}
+      PREIS.geb = out;
+    }
+    // Fahrzeugpreise einer Gebäudeart von der Kaufseite einer eigenen Wache dieser Art lesen
+    async function fzPreiseLaden(bt) {
+      if (PREIS.geholt[bt]) return;
+      PREIS.geholt[bt] = true;
+      const g = (geb || []).find(x => x.bt === bt); if (!g) return;
+      try {
+        const d = dom(await fetch(`/buildings/${g.id}/vehicles/new`).then(r => r.text()));
+        d.querySelectorAll('section.purchase[data-credits-unit]').forEach(sec => {
+          const box = sec.closest('.vehicle_type') || sec.parentElement;
+          const a = box && box.querySelector('a[href*="/credits"],a[href*="/coins"]');
+          const m = a && a.getAttribute('href').match(/\/vehicle\/\d+\/(\d+)\/(credits|coins)/);
+          if (m) PREIS.fz[m[1]] = { c: zahlAus(sec.dataset.creditsUnit) || 0, k: zahlAus(sec.dataset.coinsUnit) || 0 };
+        });
+      } catch (e) { PREIS.geholt[bt] = false; return; }
+      setJ('vpreis', { t: Date.now(), p: PREIS.fz, bts: Object.keys(PREIS.geholt).filter(b => PREIS.geholt[b]).map(Number) });
+    }
+    // Auf welcher eigenen Gebäudeart kann man das Fahrzeug kaufen (geplante Wache bevorzugt)?
+    function fzBt(id) {
+      const wo = (FZT[id] && FZT[id].possibleBuildings) || [], hab = new Set((geb || []).map(g => g.bt));
+      if (wache.bt !== '' && wo.includes(+wache.bt) && hab.has(+wache.bt)) return +wache.bt;
+      return wo.find(b => hab.has(b));
+    }
+    async function preiseNachladen() {
+      if (!FZT || PREIS.laedt) return;
+      const bts = new Set(auswahl.map(a => fzBt(a.t)).filter(b => b != null && !PREIS.geholt[b]));
+      if (!bts.size && PREIS.geb) return;
+      PREIS.laedt = true; if (tab === 'r') rechnerZeichnen();
+      await gebPreiseLaden();
+      for (const b of bts) await fzPreiseLaden(b);
+      PREIS.laedt = false; if (pp && tab === 'r') rechnerZeichnen();
+    }
+    function fzPreis(id) {
+      const t = FZT[id], liste = { c: t.credits || 0, k: t.coins || 0 }, sv = PREIS.fz[id];
+      if (!sv) return { ...liste, liste: true, rabatt: 0 };
+      const rabatt = liste.c && sv.c && sv.c < liste.c ? Math.round((1 - sv.c / liste.c) * 100) : 0;
+      return { c: sv.c, k: sv.k, liste: false, rabatt };
+    }
+    const lbW = () => (wache.bt !== '' && LB && LB[wache.bt]) || null;
+    // Erweiterung der geplanten Wache, die das Fahrzeug freischaltet (z.B. RTW auf Feuerwache → „Rettungsdienst“)
+    function noetigeErw(id) {
+      const w = lbW(); if (!w) return -1;
+      return (w.extensions || []).findIndex(e => (e.unlocksVehicleTypes || []).includes(+id));
+    }
+    const passtAufWache = id => !lbW() || ((FZT[id].possibleBuildings || []).includes(+wache.bt));
+    // Hinweise je Fahrzeug: Ausbildung, Sonderregeln, passt nicht auf die Wache, Erweiterung nötig
+    function hinweise(id) {
+      const t = FZT[id], r = anforderung(id), out = [];
+      if (r.aus.length) out.push(`<div class="warn">⚠️ Braucht Personal mit Ausbildung: ${r.aus.map(x => `<b>${esc(x.l)}</b> ×${x.need}${x.d ? ` (${x.d} Tage Lehrgang)` : ''}`).join(', ')}</div>`);
+      if (t.special) out.push(`<div class="sub">ℹ️ ${esc(t.special)}</div>`);
+      const w = lbW();
+      if (w && !passtAufWache(id)) out.push(`<div class="bad">🚫 Kann nicht auf „${esc(w.caption)}“ stehen</div>`);
+      else if (w) { const e = noetigeErw(id); if (e >= 0) out.push(`<div class="mid">🧩 Braucht die Erweiterung „${esc(w.extensions[e].caption)}“ (in den Kosten enthalten)</div>`); }
+      return out.join('');
+    }
+    function wacheZeichnen() {
+      const box = pp.querySelector('.wbox');
+      if (!LB) { box.innerHTML = '<div class="box sub">Gebäudedaten (LSS-Manager) nicht erreichbar – Kosten nur für Fahrzeuge.</div>'; return; }
+      const typen = Object.entries(LB).filter(([, b]) => (b.credits || 0) > 0).sort(([, a], [, b]) => a.caption.localeCompare(b.caption, 'de'));
+      const w = lbW(), lv = w && w.levelPrices && w.levelPrices.credits ? w.levelPrices.credits.length : 0;
+      box.innerHTML = `<div class="box"><div class="h">🏗️ Neue Wache bauen? <span class="sub">(optional)</span></div>
+        <select class="wsel"><option value="">– keine, nur Fahrzeuge –</option>${typen.map(([i, b]) => `<option value="${i}" ${String(wache.bt) === i ? 'selected' : ''}>${esc(b.caption)}</option>`).join('')}</select>
+        ${w && lv ? `<label style="margin-left:8px">Ausbaustufen <input type="number" class="wst" min="0" max="${lv}" value="${wache.stufen}" style="width:55px"> <span class="sub">(max. ${lv})</span></label>` : ''}
+        ${w && (w.extensions || []).length ? `<div style="margin-top:4px">${w.extensions.map((e, i) => `<label><input type="checkbox" class="wext" data-i="${i}" ${wache.ext[i] ? 'checked' : ''}> ${esc(e.caption)} <span class="sub">${cr(e.credits)} Cr</span></label>`).join('')}</div>` : ''}</div>`;
+    }
+    function kostenHtml() {
+      const z = []; let sc = 0, sk = 0, kFehlt = false, liste = false;
+      const zeile = (txt, c, k, extra) => {
+        z.push(`<tr><td>${txt}${extra || ''}</td><td class="r">${c == null ? '–' : cr(c) + ' Cr'}</td><td class="r">${k == null || k < 0 ? '–' : cr(k) + ' Co'}</td></tr>`);
+        sc += c || 0; if (k == null || k < 0) kFehlt = true; else sk += k;
+      };
+      const rbTag = p => p ? `<span class="rb" title="Rabattaktion vom Server">−${p} %</span>` : '';
+      const lt = () => { liste = true; return ' <span class="sub">(Listenpreis)</span>'; };
+      const w = lbW();
+      let frei = null;   // Startfahrzeug, das beim Bau dabei ist
+      if (w) {
+        const gp = PREIS.geb && PREIS.geb[wache.bt];
+        if (gp && gp.c != null) zeile(`🏠 ${esc(w.caption)} bauen`, gp.c, gp.k, rbTag(gp.rabatt));
+        else zeile(`🏠 ${esc(w.caption)} bauen`, w.credits, w.coins, lt());
+        if (wache.stufen > 0 && w.levelPrices) {
+          const s = (w.levelPrices.credits || []).slice(0, wache.stufen).reduce((a, b) => a + b, 0);
+          const k = (w.levelPrices.coins || []).slice(0, wache.stufen).reduce((a, b) => a + b, 0);
+          zeile(`⬆️ Ausbaustufe 1–${wache.stufen}`, s, k, lt());
+        }
+        const grund = {};
+        auswahl.forEach(a => { const e = noetigeErw(a.t); if (e >= 0) (grund[e] = grund[e] || []).push(FZT[a.t].caption); });
+        (w.extensions || []).forEach((e, i) => {
+          if (!wache.ext[i] && !grund[i]) return;
+          zeile(`🧩 Erweiterung „${esc(e.caption)}“${grund[i] ? ` <span class="sub">– nötig für ${esc(grund[i].join(', '))}</span>` : ''}`, e.credits, e.coins, lt());
+        });
+        // Startfahrzeug: das teuerste passende aus der Auswahl ist beim Bau gratis
+        const start = (gp && gp.start) || [];
+        auswahl.filter(a => start.includes(String(a.t))).forEach(a => { if (!frei || fzPreis(a.t).c > fzPreis(frei).c) frei = a.t; });
+      }
+      auswahl.forEach(a => {
+        const p = fzPreis(a.t), n = a.n - (frei === a.t ? 1 : 0);
+        const txt = `🚒 ${a.n}× ${esc(FZT[a.t].caption)} <span class="sub">à ${cr(p.c)} Cr${frei === a.t ? ', 1× Startfahrzeug gratis' : ''}</span>`;
+        zeile(txt, p.c * n, p.k * n, p.liste ? lt() : rbTag(p.rabatt));
+      });
+      if (!z.length) return '';
+      return `<div class="box"><div class="h">💰 Kosten${PREIS.laedt ? ' <span class="sub">(Preise werden geladen …)</span>' : ''}</div>
+        <table class="kost">${z.join('')}<tr class="sum"><td>Gesamt</td><td class="r">${cr(sc)} Cr</td><td class="r">${kFehlt ? '–' : cr(sk) + ' Co'}</td></tr></table>
+        <div class="sub" style="margin-top:4px">Preise ohne Zusatz kommen direkt vom Spiel – eine laufende Rabattaktion ist dort schon drin (<span class="rb">−%</span> = Rabatt).
+        ${liste ? '„Listenpreis“ = Normalpreis aus den LSS-Manager-Daten, ein Rabatt ist da nicht berücksichtigt.' : ''} Credits <i>oder</i> Coins – die Coins-Spalte ist nur zum Vergleich.</div></div>`;
+    }
+
     function treffer() {
       const box = pp.querySelector('.treffer'), q = pp.querySelector('.rq').value.trim().toLowerCase();
       if (!FZT) { box.innerHTML = '<div class="it sub">Fahrzeugdaten (LSS-Manager) nicht erreichbar.</div>'; return; }
@@ -1037,19 +1182,20 @@
       const hits = Object.entries(FZT).filter(([, t]) => t.caption.toLowerCase().includes(q))
         .sort(([, a], [, b]) => (b.caption.toLowerCase().startsWith(q) - a.caption.toLowerCase().startsWith(q)) || a.caption.localeCompare(b.caption, 'de', { numeric: true })).slice(0, 10);
       box.innerHTML = hits.length ? hits.map(([id, t]) => { const r = anforderung(id); return `<div class="it pick" data-add="${id}">
-        <div class="main"><b>${esc(t.caption)}</b><div class="sub">Besatzung ${r.min}–${r.max}${r.aus.length ? ' · ' + r.aus.map(x => `${esc(x.l)} ×${x.need}`).join(', ') : ''}</div></div>
+        <div class="main"><b>${esc(t.caption)}</b>${r.aus.length ? ' <span class="warn" title="Braucht Personal mit Ausbildung">⚠️</span>' : ''}${passtAufWache(id) ? '' : ' <span class="bad" title="Passt nicht auf die geplante Wache">🚫</span>'}
+        <div class="sub">${cr(fzPreis(id).c)} Credits${fzPreis(id).rabatt ? ` <span class="rb">−${fzPreis(id).rabatt} %</span>` : ''} · Besatzung ${r.min}–${r.max}${r.aus.length ? ' · ' + r.aus.map(x => `${esc(x.l)} ×${x.need}`).join(', ') : ''}</div></div>
         <button class="go" data-add="${id}">＋</button></div>`; }).join('') : '<div class="it sub">Kein Fahrzeug gefunden.</div>';
     }
 
     function rechnerZeichnen() {
       const aw = pp.querySelector('.auswahl'), erg = pp.querySelector('.erg');
-      if (!auswahl.length) { aw.innerHTML = ''; erg.innerHTML = '<div class="box sub">Such oben ein Fahrzeug und klick es an. Du kannst auch mehrere Fahrzeuge zusammenstellen, z.B. für eine komplette neue Wache.</div>'; return; }
+      if (!auswahl.length) { aw.innerHTML = ''; erg.innerHTML = kostenHtml() + '<div class="box sub">Such oben ein Fahrzeug und klick es an. Du kannst auch mehrere Fahrzeuge zusammenstellen, z.B. für eine komplette neue Wache – oben die Wache wählen, dann siehst du die Gesamtkosten.</div>'; return; }
       aw.innerHTML = '<div class="box"><div class="h">Auswahl</div>' + auswahl.map((a, i) => `<div class="it">
-        <div class="main"><b>${a.n}× ${esc(FZT[a.t].caption)}</b></div>
+        <div class="main"><b>${a.n}× ${esc(FZT[a.t].caption)}</b>${hinweise(a.t)}</div>
         <button class="sb" data-dec="${i}">−</button><button class="sb" data-inc="${i}">＋</button><button class="sb" data-rm="${i}">✕</button></div>`).join('') + '</div>';
       const b = bedarf(), maxD = Math.max(0, ...b.aus.map(x => x.d));
       const ausTxt = b.aus.length ? b.aus.map(x => `<span class="tag">${esc(x.l)} ×${x.need}${x.d ? ` · ${x.d} Tage` : ''}</span>`).join('') : '<span class="sub">keine Lehrgänge nötig</span>';
-      let html = `<div class="box"><div class="h">Bedarf</div>
+      let html = kostenHtml() + `<div class="box"><div class="h">Bedarf</div>
         Voll besetzt: <b>${b.voll}</b> Personen · zum Ausrücken mindestens: <b>${b.min}</b><div style="margin-top:3px">${ausTxt}</div></div>
         <div class="box"><div class="h">🆕 Neue Wache</div>
         ${b.voll} Leute einstellen: Mit aktiver Werbephase kommt höchstens <b>1 Person pro Nacht</b> → mindestens <b>${tage(b.voll)}</b> (frühestens ${datum(b.voll)}).
@@ -1104,13 +1250,19 @@
       pp.innerHTML = `<div class="hd"><span class="tab" data-t="p">👥 Personal</span><span class="tab" data-t="g">🏠 Gebäude</span>${AN('rechner') ? '<span class="tab" data-t="r">🧮 Rechner</span>' : ''}<span class="x" title="Schließen">✕</span></div>
         <div class="tools"><input class="q" placeholder="Suchen: Name, Ausbildung, Wache, Fahrzeug …"><select class="aus"></select></div>
         <div class="info"></div><div class="list"></div>
-        <div class="rech"><div class="tools"><input class="rq q2" placeholder="Fahrzeug suchen … (z.B. NEF, HLF 20, ELW 2)"></div><div class="treffer"></div><div class="auswahl"></div><div class="erg"></div></div>`;
+        <div class="rech"><div class="wbox"></div><div class="tools"><input class="rq q2" placeholder="Fahrzeug suchen … (z.B. NEF, HLF 20, ELW 2)"></div><div class="treffer"></div><div class="auswahl"></div><div class="erg"></div></div>`;
       document.body.appendChild(pp);
       pp.addEventListener('input', e => { if (e.target.classList.contains('q')) zeichnen(); if (e.target.classList.contains('rq')) treffer(); });
-      pp.addEventListener('change', e => { if (e.target.classList.contains('aus')) zeichnen(); });
+      pp.addEventListener('change', e => {
+        const c = e.target.classList;
+        if (c.contains('aus')) zeichnen();
+        if (c.contains('wsel')) { wache.bt = e.target.value; wache.stufen = 0; wache.ext = {}; wacheZeichnen(); treffer(); rechnerZeichnen(); preiseNachladen(); }
+        if (c.contains('wst')) { const lv = ((lbW() || {}).levelPrices || {}).credits || []; wache.stufen = Math.max(0, Math.min(lv.length, parseInt(e.target.value, 10) || 0)); e.target.value = wache.stufen; rechnerZeichnen(); }
+        if (c.contains('wext')) { wache.ext[e.target.dataset.i] = e.target.checked; rechnerZeichnen(); }
+      });
       pp.addEventListener('click', e => {
         const t = e.target.closest('[data-add],[data-inc],[data-dec],[data-rm],[data-t],[data-open],.go,.x,.reload,.nurwb') || e.target;
-        if (t.dataset.add) { const f = auswahl.find(a => a.t === t.dataset.add); if (f) f.n++; else auswahl.push({ t: t.dataset.add, n: 1 }); pp.querySelector('.rq').value = ''; treffer(); return rechnerZeichnen(); }
+        if (t.dataset.add) { const f = auswahl.find(a => a.t === t.dataset.add); if (f) f.n++; else auswahl.push({ t: t.dataset.add, n: 1 }); pp.querySelector('.rq').value = ''; treffer(); rechnerZeichnen(); return preiseNachladen(); }
         if (t.dataset.inc) { auswahl[+t.dataset.inc].n++; return rechnerZeichnen(); }
         if (t.dataset.dec) { const a = auswahl[+t.dataset.dec]; if (--a.n < 1) auswahl.splice(+t.dataset.dec, 1); return rechnerZeichnen(); }
         if (t.dataset.rm) { auswahl.splice(+t.dataset.rm, 1); return rechnerZeichnen(); }
@@ -1163,6 +1315,7 @@
       <div class="zeile">Chance „besetzt“ beim Anruf (%) ${zahl('besetztChance', 0.01, 0, 90, 1)}</div>
       <div class="zeile">Werbephasen-Warnung wiederholen alle (Minuten) ${zahl('werbeWarnAlleMin', 1, 5, 1440, 5)}</div>
       <div class="zeile">AAO-Protokoll: angezeigte Einträge ${zahl('aaoAnzeige', 1, 1, 20, 1)}</div>
+      <div class="zeile">Rechner: Preise zwischenspeichern (Minuten) ${zahl('preisCacheMin', 1, 1, 240, 1)}</div>
       <div class="knoepfe"><button class="btn btn-default btn-sm" data-a="std">Auf Standard zurücksetzen</button>
       <button class="btn btn-default btn-sm" data-a="x">Abbrechen</button>
       <button class="btn btn-success btn-sm" data-a="ok">Speichern & neu laden</button></div></div>`;
