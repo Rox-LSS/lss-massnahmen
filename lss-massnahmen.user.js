@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         LSS Leitstellen-Maßnahmen
 // @namespace    rox88.lss.massnahmen
-// @version      1.5.0-beta.1
+// @version      1.5.0-beta.2
 // @description  Realistische Zusatzaufgaben für Einsätze (Stadtwerke, Bauhof, Bahn, Behörden …) zum Abarbeiten per Anruf/Funk, dazu Personal- und Gebäudesuche, Personal- und Kostenrechner und Werbephasen-Warnung. Alarmiert nichts und klickt nichts an.
 // @author       Rox88(LSS und greasyfork) aka Rox-LSS (Github)
 // @license      MIT
@@ -46,7 +46,8 @@
     meldungen:     'ja',   // Meldungen unten rechts (Rückmeldungen, vergessene Maßnahmen)
     statistik:     'ja',   // Zähler unten links (offen / erledigt / vergessen)
     personalPanel: 'ja',   // Button „👥 Personal & Wachen“ neben „Ort suchen…“
-    rechner:       'ja',   // Reiter „🧮 Rechner“ im Panel (Personal, Lehrgänge, Kosten)
+    rechner:       'ja',   // Reiter „🧮 Rechner“ im Panel
+    kostenrechner: 'ja',   // Button „💰 Kosten“: Kostenrechner für Wache + Fahrzeuge (mit Rabattaktionen)
     werbeWarnung:  'ja',   // Warnung, wenn eine Wache unter Personalziel ist und keine Werbephase läuft
     aaoProtokoll:  'ja',   // merkt sich alte AAO-Werte beim Speichern, damit du sie wieder eintragen kannst
     verletzte:     'ja',   // Einsatzliste: 🩹 garantiert / ❔ möglicherweise / ⚪ keine Verletzten + Filter
@@ -63,7 +64,7 @@
     rueckmeldungMin: 120,     // Rückmeldung frühestens nach … Sekunden
     rueckmeldungMax: 300,     // … und spätestens nach … Sekunden
     personalCacheMin: 30,     // Personal-Liste so viele Minuten zwischenspeichern
-    preisCacheMin: 30,        // Rechner: Preise vom Server so viele Minuten zwischenspeichern (Rabattaktionen!)
+    preisCacheMin: 30,        // Kostenrechner: Preise vom Server so viele Minuten zwischenspeichern (Rabattaktionen!)
     werbeWarnAlleMin: 60,     // so oft (Minuten) die Warnung erneut als Meldung zeigen
     aaoAnzeige: 5,            // AAO-Protokoll: so viele frühere Stände bzw. geänderte AAOs anzeigen
     scanIntervall: 5000,      // ms – wie oft die Einsatzliste geprüft wird
@@ -659,24 +660,24 @@
     #lssmz-toasts{position:fixed;right:12px;bottom:12px;z-index:99999;display:flex;flex-direction:column;gap:6px;max-width:340px}
     .lssmz-toast{background:#222;color:#fff;border-left:4px solid #c9a227;padding:8px 10px;border-radius:4px;box-shadow:0 2px 8px rgba(0,0,0,.4);cursor:pointer;font-size:13px}
     #lssmz-stats{position:fixed;left:8px;bottom:8px;z-index:9999;background:rgba(0,0,0,.75);color:#fff;font-size:12px;padding:4px 8px;border-radius:4px}
-    #lssmz-ppbtn{margin:8px 0 0 6px}
-    #lssmz-pp{position:fixed;top:52px;right:12px;width:560px;max-width:95vw;max-height:75vh;display:flex;flex-direction:column;z-index:100000;background:#2b2b2b;color:#eee;border:1px solid #c9a227;border-radius:6px;box-shadow:0 6px 24px rgba(0,0,0,.6);font-size:13px}
-    #lssmz-pp .hd{display:flex;gap:6px;align-items:center;padding:8px;border-bottom:1px solid #444}
-    #lssmz-pp .hd .tab{cursor:pointer;padding:3px 10px;border-radius:4px;background:#3a3a3a}
-    #lssmz-pp .hd .tab.on{background:#c9a227;color:#000;font-weight:bold}
-    #lssmz-pp .hd .x{margin-left:auto;cursor:pointer;font-size:18px;padding:0 6px}
-    #lssmz-pp .tools{display:flex;gap:6px;padding:8px;flex-wrap:wrap;align-items:center}
-    #lssmz-pp input,#lssmz-pp select{background:#1e1e1e;color:#eee;border:1px solid #555;border-radius:4px;padding:3px 6px}
-    #lssmz-pp input.q,#lssmz-pp input.rq{flex:1;min-width:180px}
-    #lssmz-pp .info{padding:0 8px 6px;font-size:11px;opacity:.75}
-    #lssmz-pp .list{overflow:auto;flex:1;border-top:1px solid #444}
-    #lssmz-pp .it{display:flex;gap:8px;align-items:center;padding:5px 8px;border-bottom:1px solid #383838}
-    #lssmz-pp .it:hover{background:#353535}
-    #lssmz-pp .it .main{flex:1;min-width:0}
-    #lssmz-pp .it .sub{font-size:11px;opacity:.75}
-    #lssmz-pp .tag{display:inline-block;background:#444;border-radius:3px;padding:0 4px;margin:1px 2px 0 0;font-size:11px}
-    #lssmz-pp .go{cursor:pointer;background:#c9a227;color:#000;border:0;border-radius:4px;padding:2px 8px;font-weight:bold}
-    #lssmz-pp a{color:#f0c040}
+    #lssmz-ppbtn,#lssmz-kpbtn{margin:8px 0 0 6px}
+    .lssmz-fenster{position:fixed;top:52px;right:12px;width:560px;max-width:95vw;max-height:75vh;display:flex;flex-direction:column;z-index:100000;background:#2b2b2b;color:#eee;border:1px solid #c9a227;border-radius:6px;box-shadow:0 6px 24px rgba(0,0,0,.6);font-size:13px}
+    .lssmz-fenster .hd{display:flex;gap:6px;align-items:center;padding:8px;border-bottom:1px solid #444}
+    .lssmz-fenster .hd .tab{cursor:pointer;padding:3px 10px;border-radius:4px;background:#3a3a3a}
+    .lssmz-fenster .hd .tab.on{background:#c9a227;color:#000;font-weight:bold}
+    .lssmz-fenster .hd .x{margin-left:auto;cursor:pointer;font-size:18px;padding:0 6px}
+    .lssmz-fenster .tools{display:flex;gap:6px;padding:8px;flex-wrap:wrap;align-items:center}
+    .lssmz-fenster input,.lssmz-fenster select{background:#1e1e1e;color:#eee;border:1px solid #555;border-radius:4px;padding:3px 6px}
+    .lssmz-fenster input.q,.lssmz-fenster input.rq{flex:1;min-width:180px}
+    .lssmz-fenster .info{padding:0 8px 6px;font-size:11px;opacity:.75}
+    .lssmz-fenster .list{overflow:auto;flex:1;border-top:1px solid #444}
+    .lssmz-fenster .it{display:flex;gap:8px;align-items:center;padding:5px 8px;border-bottom:1px solid #383838}
+    .lssmz-fenster .it:hover{background:#353535}
+    .lssmz-fenster .it .main{flex:1;min-width:0}
+    .lssmz-fenster .it .sub{font-size:11px;opacity:.75}
+    .lssmz-fenster .tag{display:inline-block;background:#444;border-radius:3px;padding:0 4px;margin:1px 2px 0 0;font-size:11px}
+    .lssmz-fenster .go{cursor:pointer;background:#c9a227;color:#000;border:0;border-radius:4px;padding:2px 8px;font-weight:bold}
+    .lssmz-fenster a{color:#f0c040}
     #lssmz-set{position:fixed;inset:0;z-index:100001;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center}
     #lssmz-set .box{background:#2b2b2b;color:#eee;border:1px solid #c9a227;border-radius:6px;width:520px;max-width:95vw;max-height:85vh;overflow:auto;padding:12px 16px;font-size:13px;zoom:var(--lssmz-zoom,1)}
     #lssmz-set h3{margin:0 0 8px;font-size:17px;color:#f0c040}
@@ -695,22 +696,23 @@
     body.lssmz-v-k-aus .missionSideBarEntry[data-lssmz-v="k"]{display:none!important}
     a.aao_btn.lssmz-fehlt{opacity:.45}
     a.aao_btn.lssmz-fehlt .label{display:none}
-    #lssmz-pp .rech{display:none;flex-direction:column;overflow:auto;flex:1;border-top:1px solid #444}
-    #lssmz-pp .rech .box{padding:8px;border-bottom:1px solid #383838}
-    #lssmz-pp .rech .h{font-weight:bold;color:#f0c040;margin-bottom:4px}
-    #lssmz-pp .pick{cursor:pointer}
-    #lssmz-pp .sb{background:#444;color:#eee;border:0;border-radius:3px;padding:0 7px;margin-left:2px;cursor:pointer}
-    #lssmz-pp .ok{color:#5cb85c}#lssmz-pp .mid{color:#f0ad4e}#lssmz-pp .bad{color:#ff6b6b}
-    #lssmz-pp .warn{color:#f0ad4e;font-size:12px}
-    #lssmz-pp table.kost{width:100%;border-collapse:collapse;font-size:12px}
-    #lssmz-pp table.kost td{padding:2px 4px;border-bottom:1px solid #383838;vertical-align:top}
-    #lssmz-pp table.kost td.r{text-align:right;white-space:nowrap}
-    #lssmz-pp table.kost tr.sum td{font-weight:bold;border-top:2px solid #c9a227;border-bottom:0}
-    #lssmz-pp .rb{display:inline-block;background:#dc3545;color:#fff;border-radius:3px;padding:0 4px;margin-left:4px;font-size:11px;font-weight:bold}
-    #lssmz-pp .wbox label{display:inline-block;margin:2px 10px 2px 0;font-weight:normal;cursor:pointer}
-    #lssmz-pp .wbox select{max-width:100%}`;
+    .lssmz-fenster .rech{display:none;flex-direction:column;overflow:auto;flex:1;border-top:1px solid #444}
+    .lssmz-fenster .rech .box{padding:8px;border-bottom:1px solid #383838}
+    .lssmz-fenster .rech .h{font-weight:bold;color:#f0c040;margin-bottom:4px}
+    .lssmz-fenster .pick{cursor:pointer}
+    .lssmz-fenster .sb{background:#444;color:#eee;border:0;border-radius:3px;padding:0 7px;margin-left:2px;cursor:pointer}
+    .lssmz-fenster .ok{color:#5cb85c}.lssmz-fenster .mid{color:#f0ad4e}.lssmz-fenster .bad{color:#ff6b6b}
+    .lssmz-fenster .warn{color:#f0ad4e;font-size:12px}
+    .lssmz-fenster table.kost{width:100%;border-collapse:collapse;font-size:12px}
+    .lssmz-fenster table.kost td{padding:2px 4px;border-bottom:1px solid #383838;vertical-align:top}
+    .lssmz-fenster table.kost td.r{text-align:right;white-space:nowrap}
+    .lssmz-fenster table.kost tr.sum td{font-weight:bold;border-top:2px solid #c9a227;border-bottom:0}
+    .lssmz-fenster .rb{display:inline-block;background:#dc3545;color:#fff;border-radius:3px;padding:0 4px;margin-left:4px;font-size:11px;font-weight:bold}
+    .lssmz-fenster .wbox label{display:inline-block;margin:2px 10px 2px 0;font-weight:normal;cursor:pointer}
+    .lssmz-fenster .wbox select{max-width:100%}
+    #lssmz-kp{right:auto;left:12px;width:600px}`;
   const addCss = () => { if (document.getElementById('lssmz-css')) return; const s = document.createElement('style'); s.id = 'lssmz-css'; s.textContent = css + `
-    .lssmz-panel,.lssmz-badge,.lssmz-toast,#lssmz-stats,#lssmz-pp,#lssmz-set .box{zoom:${CFG.zoom}}`; document.head.appendChild(s); };
+    .lssmz-panel,.lssmz-badge,.lssmz-toast,#lssmz-stats,.lssmz-fenster,#lssmz-set .box{zoom:${CFG.zoom}}`; document.head.appendChild(s); };
   const fmt = ts => new Date(ts).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
   const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
@@ -873,6 +875,7 @@
     zeigeStats();
     let panel = null;
     if (AN('personalPanel')) try { panel = personalPanel(); } catch (e) { console.warn('[LSS-Maßnahmen] Panel', e); }
+    if (AN('kostenrechner')) try { kostenPanel(); } catch (e) { console.warn('[LSS-Maßnahmen] Kosten', e); }
     try { einstellButton(); } catch (e) {}
     if (AN('verletzte')) verletzte().catch(() => {});
     let werbeIds = [];
@@ -985,7 +988,7 @@
       info.style.display = r ? 'none' : '';
       list.style.display = r ? 'none' : '';
       pp.querySelector('.rech').style.display = r ? 'flex' : 'none';
-      if (r) { if (geb) { if (!pp.querySelector('.wsel')) wacheZeichnen(); treffer(); rechnerZeichnen(); preiseNachladen(); } else pp.querySelector('.erg').innerHTML = '<div class="box">Lade Daten …</div>'; return; }
+      if (r) { if (geb) { treffer(); rechnerZeichnen(); } else pp.querySelector('.erg').innerHTML = '<div class="box">Lade Daten …</div>'; return; }
       if (!geb) { list.innerHTML = '<div class="it">Lade Gebäude …</div>'; return; }
       const gm = gebMap();
       if (tab === 'g') {
@@ -1040,6 +1043,136 @@
     }
     const tage = n => n === 1 ? '1 Nacht' : `${n} Nächte`;
     const datum = n => new Date(Date.now() + n * 86400000).toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit' });
+
+    function treffer() {
+      const box = pp.querySelector('.treffer'), q = pp.querySelector('.rq').value.trim().toLowerCase();
+      if (!FZT) { box.innerHTML = '<div class="it sub">Fahrzeugdaten (LSS-Manager) nicht erreichbar.</div>'; return; }
+      if (!q) { box.innerHTML = ''; return; }
+      const hits = Object.entries(FZT).filter(([, t]) => t.caption.toLowerCase().includes(q))
+        .sort(([, a], [, b]) => (b.caption.toLowerCase().startsWith(q) - a.caption.toLowerCase().startsWith(q)) || a.caption.localeCompare(b.caption, 'de', { numeric: true })).slice(0, 10);
+      box.innerHTML = hits.length ? hits.map(([id, t]) => { const r = anforderung(id); return `<div class="it pick" data-add="${id}">
+        <div class="main"><b>${esc(t.caption)}</b><div class="sub">Besatzung ${r.min}–${r.max}${r.aus.length ? ' · ' + r.aus.map(x => `${esc(x.l)} ×${x.need}`).join(', ') : ''}</div></div>
+        <button class="go" data-add="${id}">＋</button></div>`; }).join('') : '<div class="it sub">Kein Fahrzeug gefunden.</div>';
+    }
+
+    function rechnerZeichnen() {
+      const aw = pp.querySelector('.auswahl'), erg = pp.querySelector('.erg');
+      if (!auswahl.length) { aw.innerHTML = ''; erg.innerHTML = '<div class="box sub">Such oben ein Fahrzeug und klick es an. Du kannst auch mehrere Fahrzeuge zusammenstellen, z.B. für eine komplette neue Wache.</div>'; return; }
+      aw.innerHTML = '<div class="box"><div class="h">Auswahl</div>' + auswahl.map((a, i) => `<div class="it">
+        <div class="main"><b>${a.n}× ${esc(FZT[a.t].caption)}</b></div>
+        <button class="sb" data-dec="${i}">−</button><button class="sb" data-inc="${i}">＋</button><button class="sb" data-rm="${i}">✕</button></div>`).join('') + '</div>';
+      const b = bedarf(), maxD = Math.max(0, ...b.aus.map(x => x.d));
+      const ausTxt = b.aus.length ? b.aus.map(x => `<span class="tag">${esc(x.l)} ×${x.need}${x.d ? ` · ${x.d} Tage` : ''}</span>`).join('') : '<span class="sub">keine Lehrgänge nötig</span>';
+      let html = `<div class="box"><div class="h">Bedarf</div>
+        Voll besetzt: <b>${b.voll}</b> Personen · zum Ausrücken mindestens: <b>${b.min}</b><div style="margin-top:3px">${ausTxt}</div></div>
+        <div class="box"><div class="h">🆕 Neue Wache</div>
+        ${b.voll} Leute einstellen: Mit aktiver Werbephase kommt höchstens <b>1 Person pro Nacht</b> → mindestens <b>${tage(b.voll)}</b> (frühestens ${datum(b.voll)}).
+        ${b.aus.length ? `<br>Danach Lehrgänge: ca. <b>${maxD} Tage</b>, wenn alle parallel laufen → insgesamt ca. <b>${b.voll + maxD} Tage</b> (${datum(b.voll + maxD)}).` : ''}
+        <div class="sub">Die Werbephase läuft max. 3 Tage und muss neu gestartet werden. Schneller geht's nur mit Coins (direkt einstellen).</div></div>`;
+      // bestehende Wachen
+      const passend = (geb || []).filter(g => b.wo.includes(g.bt));
+      if (!passend.length) { html += '<div class="box sub">Du hast keine Wache, auf der diese Auswahl stehen kann.</div>'; erg.innerHTML = html; return; }
+      const rows = passend.map(g => {
+        const frei = g.p - g.voll, fehlt = Math.max(0, b.voll - frei);
+        const mp = (pers || []).filter(x => x.w === g.id && !x.b);
+        const fa = b.aus.map(x => { const hat = mp.filter(p => p.a.includes(x.l) || p.a.includes(x.cap)).length; return { ...x, hat, fehlt: Math.max(0, x.need - hat) }; });
+        const faSum = fa.reduce((s, x) => s + x.fehlt, 0);
+        return { g, frei, fehlt, fa, faSum, rang: (fehlt ? 2 : faSum ? 1 : 0) * 1e6 + fehlt * 1000 + faSum };
+      }).sort((a, c) => a.rang - c.rang);
+      html += `<div class="box"><div class="h">🏠 Deine Wachen${pers ? '' : ' <span class="sub">(Ausbildungen werden noch geladen …)</span>'}</div></div>` + rows.map(r => {
+        const st = !r.fehlt && !r.faSum ? '<span class="ok">✅ passt sofort</span>'
+          : !r.fehlt ? '<span class="mid">🟡 Personal reicht, Ausbildung fehlt</span>'
+          : `<span class="bad">🔴 es fehlen ${r.fehlt} Leute → mind. ${tage(r.fehlt)}</span>`;
+        const aus = r.fa.map(x => `<span class="tag" style="${x.fehlt ? 'color:#ff6b6b' : ''}">${esc(x.l)} ${x.hat}/${x.need}</span>`).join('');
+        return `<div class="it"><button class="go" data-lat="${r.g.lat}" data-lng="${r.g.lng}" title="Wache auf Karte zentrieren">➤</button>
+          <div class="main"><b>${esc(r.g.n)}</b> ${st}<div class="sub">frei: ${Math.max(0, r.frei)} von ${r.g.p} (${r.g.voll} schon für vorhandene Fahrzeuge verplant)</div>
+          ${aus ? `<div>${aus} <span class="sub">freie ausgebildete Leute</span></div>` : ''}</div>
+          <a href="#" data-open="/buildings/${r.g.id}">Details</a></div>`;
+      }).join('');
+      erg.innerHTML = html;
+    }
+
+    function ausbildungen() {
+      const sel = pp.querySelector('.aus'), alt = sel.value, c = {};
+      (pers || []).forEach(x => x.a.forEach(a => { c[a] = (c[a] || 0) + 1; }));
+      sel.innerHTML = '<option value="">Alle Ausbildungen</option>' + Object.keys(c).sort((a, b) => a.localeCompare(b, 'de'))
+        .map(a => `<option value="${esc(a)}">${esc(a)} (${c[a]})</option>`).join('');
+      sel.value = alt;
+    }
+
+    async function personalLaden(erzwingen) {
+      if (laden) return;
+      const st = getJ('pers_t', 0);
+      if (!erzwingen && st && Date.now() - st < CFG.personalCacheMin * 60000) { pers = getJ('pers', null); if (pers) { ausbildungen(); return zeichnen(); } }
+      laden = true; pers = null; zeichnen();
+      const info = pp.querySelector('.info');
+      pers = await ladePersonal(geb, (i, n) => { info.textContent = `Lade Personal … Wache ${i} von ${n}`; });
+      setJ('pers', pers); setJ('pers_t', Date.now());
+      laden = false; ausbildungen(); zeichnen();
+    }
+
+    async function auf() {
+      if (pp) { pp.remove(); pp = null; return; }
+      addCss();
+      pp = document.createElement('div'); pp.id = 'lssmz-pp'; pp.className = 'lssmz-fenster';
+      pp.innerHTML = `<div class="hd"><span class="tab" data-t="p">👥 Personal</span><span class="tab" data-t="g">🏠 Gebäude</span>${AN('rechner') ? '<span class="tab" data-t="r">🧮 Rechner</span>' : ''}<span class="x" title="Schließen">✕</span></div>
+        <div class="tools"><input class="q" placeholder="Suchen: Name, Ausbildung, Wache, Fahrzeug …"><select class="aus"></select></div>
+        <div class="info"></div><div class="list"></div>
+        <div class="rech"><div class="tools"><input class="rq q2" placeholder="Fahrzeug suchen … (z.B. NEF, HLF 20, ELW 2)"></div><div class="treffer"></div><div class="auswahl"></div><div class="erg"></div></div>`;
+      document.body.appendChild(pp);
+      pp.addEventListener('input', e => { if (e.target.classList.contains('q')) zeichnen(); if (e.target.classList.contains('rq')) treffer(); });
+      pp.addEventListener('change', e => { if (e.target.classList.contains('aus')) zeichnen(); });
+      pp.addEventListener('click', e => {
+        const t = e.target.closest('[data-add],[data-inc],[data-dec],[data-rm],[data-t],[data-open],.go,.x,.reload,.nurwb') || e.target;
+        if (t.dataset.add) { const f = auswahl.find(a => a.t === t.dataset.add); if (f) f.n++; else auswahl.push({ t: t.dataset.add, n: 1 }); pp.querySelector('.rq').value = ''; treffer(); return rechnerZeichnen(); }
+        if (t.dataset.inc) { auswahl[+t.dataset.inc].n++; return rechnerZeichnen(); }
+        if (t.dataset.dec) { const a = auswahl[+t.dataset.dec]; if (--a.n < 1) auswahl.splice(+t.dataset.dec, 1); return rechnerZeichnen(); }
+        if (t.dataset.rm) { auswahl.splice(+t.dataset.rm, 1); return rechnerZeichnen(); }
+        if (t.classList.contains('x')) { pp.remove(); pp = null; return; }
+        if (t.dataset.t) { tab = t.dataset.t; return zeichnen(); }
+        if (t.classList.contains('go')) { zentrieren(+t.dataset.lat, +t.dataset.lng); return; }
+        if (t.dataset.open) { e.preventDefault(); oeffnen(t.dataset.open); return; }
+        if (t.classList.contains('reload')) { e.preventDefault(); personalLaden(true); }
+        if (t.classList.contains('nurwb')) { e.preventDefault(); nurWb = !nurWb; zeichnen(); }
+      });
+      pp.querySelector('.q').focus();
+      zeichnen();
+      { try { geb = await ladeGebaeude(); } catch (e) { pp.querySelector('.list').innerHTML = '<div class="it">Gebäude konnten nicht geladen werden.</div>'; return; } }
+      zeichnen();
+      personalLaden(false);
+    }
+    btn.addEventListener('click', () => auf());
+    return {
+      oeffne: async (t, wb) => { tab = t || tab; nurWb = !!wb; if (!pp) await auf(); else zeichnen(); },
+    };
+  }
+
+  /* ------------------------------------------------------------------
+   * 💰 KOSTENRECHNER (eigenes Fenster, Button neben „👥 Personal & Wachen“)
+   * ------------------------------------------------------------------ */
+  const ausLabel = cap => (SCH[cap] ? SCH[cap].l : cap.replace(/[- ](Lehrgang|Ausbildung|Fortbildung|Schulung)$/i, ''));
+  function fzAnf(id) {
+    const t = FZT[id]; const max = t.maxPersonnel || 0, min = t.minPersonnel || 0, aus = [];
+    if (t.schooling) {
+      const dep = Object.values(t.schooling)[0] || {};
+      for (const [cap, r] of Object.entries(dep)) {
+        const need = r.all ? max : (r.min || 0);
+        if (need > 0) aus.push({ cap, l: ausLabel(cap), need, d: SCH[cap] ? SCH[cap].d : 0 });
+      }
+    }
+    return { max, min, aus };
+  }
+  function kostenPanel() {
+    const vor = document.getElementById('lssmz-ppbtn') || document.getElementById('map_adress_search_form');
+    if (!vor || document.getElementById('lssmz-kpbtn')) return;
+    const btn = document.createElement('button');
+    btn.id = 'lssmz-kpbtn'; btn.type = 'button'; btn.className = 'btn btn-default btn-sm';
+    btn.textContent = '💰 Kosten'; btn.title = 'Kostenrechner: Wache und Fahrzeuge zusammenstellen';
+    vor.insertAdjacentElement('afterend', btn);
+
+    let kp = null, geb = null;
+    const auswahl = [];   // [{t: Fahrzeugtyp-ID, n: Anzahl}]
+    const anforderung = fzAnf;
 
     /* ---------- Kosten ---------- */
     // Preise kommen bevorzugt direkt vom Spiel-Server (dort ist eine laufende Rabattaktion schon eingerechnet).
@@ -1096,10 +1229,10 @@
       if (!FZT || PREIS.laedt) return;
       const bts = new Set(auswahl.map(a => fzBt(a.t)).filter(b => b != null && !PREIS.geholt[b]));
       if (!bts.size && PREIS.geb) return;
-      PREIS.laedt = true; if (tab === 'r') rechnerZeichnen();
+      PREIS.laedt = true; if (kp) zeichnen();
       await gebPreiseLaden();
       for (const b of bts) await fzPreiseLaden(b);
-      PREIS.laedt = false; if (pp && tab === 'r') rechnerZeichnen();
+      PREIS.laedt = false; if (kp) zeichnen();
     }
     function fzPreis(id) {
       const t = FZT[id], liste = { c: t.credits || 0, k: t.coins || 0 }, sv = PREIS.fz[id];
@@ -1125,7 +1258,7 @@
       return out.join('');
     }
     function wacheZeichnen() {
-      const box = pp.querySelector('.wbox');
+      const box = kp.querySelector('.wbox');
       if (!LB) { box.innerHTML = '<div class="box sub">Gebäudedaten (LSS-Manager) nicht erreichbar – Kosten nur für Fahrzeuge.</div>'; return; }
       const typen = Object.entries(LB).filter(([, b]) => (b.credits || 0) > 0).sort(([, a], [, b]) => a.caption.localeCompare(b.caption, 'de'));
       const w = lbW(), lv = w && w.levelPrices && w.levelPrices.credits ? w.levelPrices.credits.length : 0;
@@ -1176,113 +1309,55 @@
     }
 
     function treffer() {
-      const box = pp.querySelector('.treffer'), q = pp.querySelector('.rq').value.trim().toLowerCase();
+      const box = kp.querySelector('.treffer'), q = kp.querySelector('.rq').value.trim().toLowerCase();
       if (!FZT) { box.innerHTML = '<div class="it sub">Fahrzeugdaten (LSS-Manager) nicht erreichbar.</div>'; return; }
       if (!q) { box.innerHTML = ''; return; }
       const hits = Object.entries(FZT).filter(([, t]) => t.caption.toLowerCase().includes(q))
         .sort(([, a], [, b]) => (b.caption.toLowerCase().startsWith(q) - a.caption.toLowerCase().startsWith(q)) || a.caption.localeCompare(b.caption, 'de', { numeric: true })).slice(0, 10);
-      box.innerHTML = hits.length ? hits.map(([id, t]) => { const r = anforderung(id); return `<div class="it pick" data-add="${id}">
+      box.innerHTML = hits.length ? hits.map(([id, t]) => { const r = anforderung(id), p = fzPreis(id); return `<div class="it pick" data-add="${id}">
         <div class="main"><b>${esc(t.caption)}</b>${r.aus.length ? ' <span class="warn" title="Braucht Personal mit Ausbildung">⚠️</span>' : ''}${passtAufWache(id) ? '' : ' <span class="bad" title="Passt nicht auf die geplante Wache">🚫</span>'}
-        <div class="sub">${cr(fzPreis(id).c)} Credits${fzPreis(id).rabatt ? ` <span class="rb">−${fzPreis(id).rabatt} %</span>` : ''} · Besatzung ${r.min}–${r.max}${r.aus.length ? ' · ' + r.aus.map(x => `${esc(x.l)} ×${x.need}`).join(', ') : ''}</div></div>
+        <div class="sub">${cr(p.c)} Credits${p.rabatt ? ` <span class="rb">−${p.rabatt} %</span>` : ''} · ${cr(p.k)} Coins${r.aus.length ? ' · ' + r.aus.map(x => `${esc(x.l)} ×${x.need}`).join(', ') : ''}</div></div>
         <button class="go" data-add="${id}">＋</button></div>`; }).join('') : '<div class="it sub">Kein Fahrzeug gefunden.</div>';
     }
-
-    function rechnerZeichnen() {
-      const aw = pp.querySelector('.auswahl'), erg = pp.querySelector('.erg');
-      if (!auswahl.length) { aw.innerHTML = ''; erg.innerHTML = kostenHtml() + '<div class="box sub">Such oben ein Fahrzeug und klick es an. Du kannst auch mehrere Fahrzeuge zusammenstellen, z.B. für eine komplette neue Wache – oben die Wache wählen, dann siehst du die Gesamtkosten.</div>'; return; }
-      aw.innerHTML = '<div class="box"><div class="h">Auswahl</div>' + auswahl.map((a, i) => `<div class="it">
+    function zeichnen() {
+      if (!kp) return;
+      const aw = kp.querySelector('.auswahl'), erg = kp.querySelector('.erg');
+      if (!geb) { erg.innerHTML = '<div class="box">Lade Daten …</div>'; return; }
+      aw.innerHTML = auswahl.length ? '<div class="box"><div class="h">Fahrzeuge</div>' + auswahl.map((a, i) => `<div class="it">
         <div class="main"><b>${a.n}× ${esc(FZT[a.t].caption)}</b>${hinweise(a.t)}</div>
-        <button class="sb" data-dec="${i}">−</button><button class="sb" data-inc="${i}">＋</button><button class="sb" data-rm="${i}">✕</button></div>`).join('') + '</div>';
-      const b = bedarf(), maxD = Math.max(0, ...b.aus.map(x => x.d));
-      const ausTxt = b.aus.length ? b.aus.map(x => `<span class="tag">${esc(x.l)} ×${x.need}${x.d ? ` · ${x.d} Tage` : ''}</span>`).join('') : '<span class="sub">keine Lehrgänge nötig</span>';
-      let html = kostenHtml() + `<div class="box"><div class="h">Bedarf</div>
-        Voll besetzt: <b>${b.voll}</b> Personen · zum Ausrücken mindestens: <b>${b.min}</b><div style="margin-top:3px">${ausTxt}</div></div>
-        <div class="box"><div class="h">🆕 Neue Wache</div>
-        ${b.voll} Leute einstellen: Mit aktiver Werbephase kommt höchstens <b>1 Person pro Nacht</b> → mindestens <b>${tage(b.voll)}</b> (frühestens ${datum(b.voll)}).
-        ${b.aus.length ? `<br>Danach Lehrgänge: ca. <b>${maxD} Tage</b>, wenn alle parallel laufen → insgesamt ca. <b>${b.voll + maxD} Tage</b> (${datum(b.voll + maxD)}).` : ''}
-        <div class="sub">Die Werbephase läuft max. 3 Tage und muss neu gestartet werden. Schneller geht's nur mit Coins (direkt einstellen).</div></div>`;
-      // bestehende Wachen
-      const passend = (geb || []).filter(g => b.wo.includes(g.bt));
-      if (!passend.length) { html += '<div class="box sub">Du hast keine Wache, auf der diese Auswahl stehen kann.</div>'; erg.innerHTML = html; return; }
-      const rows = passend.map(g => {
-        const frei = g.p - g.voll, fehlt = Math.max(0, b.voll - frei);
-        const mp = (pers || []).filter(x => x.w === g.id && !x.b);
-        const fa = b.aus.map(x => { const hat = mp.filter(p => p.a.includes(x.l) || p.a.includes(x.cap)).length; return { ...x, hat, fehlt: Math.max(0, x.need - hat) }; });
-        const faSum = fa.reduce((s, x) => s + x.fehlt, 0);
-        return { g, frei, fehlt, fa, faSum, rang: (fehlt ? 2 : faSum ? 1 : 0) * 1e6 + fehlt * 1000 + faSum };
-      }).sort((a, c) => a.rang - c.rang);
-      html += `<div class="box"><div class="h">🏠 Deine Wachen${pers ? '' : ' <span class="sub">(Ausbildungen werden noch geladen …)</span>'}</div></div>` + rows.map(r => {
-        const st = !r.fehlt && !r.faSum ? '<span class="ok">✅ passt sofort</span>'
-          : !r.fehlt ? '<span class="mid">🟡 Personal reicht, Ausbildung fehlt</span>'
-          : `<span class="bad">🔴 es fehlen ${r.fehlt} Leute → mind. ${tage(r.fehlt)}</span>`;
-        const aus = r.fa.map(x => `<span class="tag" style="${x.fehlt ? 'color:#ff6b6b' : ''}">${esc(x.l)} ${x.hat}/${x.need}</span>`).join('');
-        return `<div class="it"><button class="go" data-lat="${r.g.lat}" data-lng="${r.g.lng}" title="Wache auf Karte zentrieren">➤</button>
-          <div class="main"><b>${esc(r.g.n)}</b> ${st}<div class="sub">frei: ${Math.max(0, r.frei)} von ${r.g.p} (${r.g.voll} schon für vorhandene Fahrzeuge verplant)</div>
-          ${aus ? `<div>${aus} <span class="sub">freie ausgebildete Leute</span></div>` : ''}</div>
-          <a href="#" data-open="/buildings/${r.g.id}">Details</a></div>`;
-      }).join('');
-      erg.innerHTML = html;
+        <button class="sb" data-dec="${i}">−</button><button class="sb" data-inc="${i}">＋</button><button class="sb" data-rm="${i}">✕</button></div>`).join('') + '</div>' : '';
+      const k = kostenHtml();
+      erg.innerHTML = k || '<div class="box sub">Wähl oben eine Wache und/oder such Fahrzeuge und klick sie an – dann siehst du hier, was alles zusammen kostet (mit laufender Rabattaktion).</div>';
     }
-
-    function ausbildungen() {
-      const sel = pp.querySelector('.aus'), alt = sel.value, c = {};
-      (pers || []).forEach(x => x.a.forEach(a => { c[a] = (c[a] || 0) + 1; }));
-      sel.innerHTML = '<option value="">Alle Ausbildungen</option>' + Object.keys(c).sort((a, b) => a.localeCompare(b, 'de'))
-        .map(a => `<option value="${esc(a)}">${esc(a)} (${c[a]})</option>`).join('');
-      sel.value = alt;
-    }
-
-    async function personalLaden(erzwingen) {
-      if (laden) return;
-      const st = getJ('pers_t', 0);
-      if (!erzwingen && st && Date.now() - st < CFG.personalCacheMin * 60000) { pers = getJ('pers', null); if (pers) { ausbildungen(); return zeichnen(); } }
-      laden = true; pers = null; zeichnen();
-      const info = pp.querySelector('.info');
-      pers = await ladePersonal(geb, (i, n) => { info.textContent = `Lade Personal … Wache ${i} von ${n}`; });
-      setJ('pers', pers); setJ('pers_t', Date.now());
-      laden = false; ausbildungen(); zeichnen();
-    }
-
     async function auf() {
-      if (pp) { pp.remove(); pp = null; return; }
+      if (kp) { kp.remove(); kp = null; return; }
       addCss();
-      pp = document.createElement('div'); pp.id = 'lssmz-pp';
-      pp.innerHTML = `<div class="hd"><span class="tab" data-t="p">👥 Personal</span><span class="tab" data-t="g">🏠 Gebäude</span>${AN('rechner') ? '<span class="tab" data-t="r">🧮 Rechner</span>' : ''}<span class="x" title="Schließen">✕</span></div>
-        <div class="tools"><input class="q" placeholder="Suchen: Name, Ausbildung, Wache, Fahrzeug …"><select class="aus"></select></div>
-        <div class="info"></div><div class="list"></div>
-        <div class="rech"><div class="wbox"></div><div class="tools"><input class="rq q2" placeholder="Fahrzeug suchen … (z.B. NEF, HLF 20, ELW 2)"></div><div class="treffer"></div><div class="auswahl"></div><div class="erg"></div></div>`;
-      document.body.appendChild(pp);
-      pp.addEventListener('input', e => { if (e.target.classList.contains('q')) zeichnen(); if (e.target.classList.contains('rq')) treffer(); });
-      pp.addEventListener('change', e => {
+      kp = document.createElement('div'); kp.id = 'lssmz-kp'; kp.className = 'lssmz-fenster';
+      kp.innerHTML = `<div class="hd"><span class="tab on">💰 Kostenrechner</span><span class="x" title="Schließen">✕</span></div>
+        <div class="rech" style="display:flex"><div class="wbox"></div><div class="tools"><input class="rq" placeholder="Fahrzeug suchen … (z.B. HLF 20, FwK, RTW)"></div><div class="treffer"></div><div class="auswahl"></div><div class="erg"></div></div>`;
+      document.body.appendChild(kp);
+      kp.addEventListener('input', e => { if (e.target.classList.contains('rq')) treffer(); });
+      kp.addEventListener('change', e => {
         const c = e.target.classList;
-        if (c.contains('aus')) zeichnen();
-        if (c.contains('wsel')) { wache.bt = e.target.value; wache.stufen = 0; wache.ext = {}; wacheZeichnen(); treffer(); rechnerZeichnen(); preiseNachladen(); }
-        if (c.contains('wst')) { const lv = ((lbW() || {}).levelPrices || {}).credits || []; wache.stufen = Math.max(0, Math.min(lv.length, parseInt(e.target.value, 10) || 0)); e.target.value = wache.stufen; rechnerZeichnen(); }
-        if (c.contains('wext')) { wache.ext[e.target.dataset.i] = e.target.checked; rechnerZeichnen(); }
+        if (c.contains('wsel')) { wache.bt = e.target.value; wache.stufen = 0; wache.ext = {}; wacheZeichnen(); treffer(); zeichnen(); preiseNachladen(); }
+        if (c.contains('wst')) { const lv = ((lbW() || {}).levelPrices || {}).credits || []; wache.stufen = Math.max(0, Math.min(lv.length, parseInt(e.target.value, 10) || 0)); e.target.value = wache.stufen; zeichnen(); }
+        if (c.contains('wext')) { wache.ext[e.target.dataset.i] = e.target.checked; zeichnen(); }
       });
-      pp.addEventListener('click', e => {
-        const t = e.target.closest('[data-add],[data-inc],[data-dec],[data-rm],[data-t],[data-open],.go,.x,.reload,.nurwb') || e.target;
-        if (t.dataset.add) { const f = auswahl.find(a => a.t === t.dataset.add); if (f) f.n++; else auswahl.push({ t: t.dataset.add, n: 1 }); pp.querySelector('.rq').value = ''; treffer(); rechnerZeichnen(); return preiseNachladen(); }
-        if (t.dataset.inc) { auswahl[+t.dataset.inc].n++; return rechnerZeichnen(); }
-        if (t.dataset.dec) { const a = auswahl[+t.dataset.dec]; if (--a.n < 1) auswahl.splice(+t.dataset.dec, 1); return rechnerZeichnen(); }
-        if (t.dataset.rm) { auswahl.splice(+t.dataset.rm, 1); return rechnerZeichnen(); }
-        if (t.classList.contains('x')) { pp.remove(); pp = null; return; }
-        if (t.dataset.t) { tab = t.dataset.t; return zeichnen(); }
-        if (t.classList.contains('go')) { zentrieren(+t.dataset.lat, +t.dataset.lng); return; }
-        if (t.dataset.open) { e.preventDefault(); oeffnen(t.dataset.open); return; }
-        if (t.classList.contains('reload')) { e.preventDefault(); personalLaden(true); }
-        if (t.classList.contains('nurwb')) { e.preventDefault(); nurWb = !nurWb; zeichnen(); }
+      kp.addEventListener('click', e => {
+        const t = e.target.closest('[data-add],[data-inc],[data-dec],[data-rm],.x') || e.target;
+        if (t.dataset.add) { const f = auswahl.find(a => a.t === t.dataset.add); if (f) f.n++; else auswahl.push({ t: t.dataset.add, n: 1 }); kp.querySelector('.rq').value = ''; treffer(); zeichnen(); return preiseNachladen(); }
+        if (t.dataset.inc) { auswahl[+t.dataset.inc].n++; return zeichnen(); }
+        if (t.dataset.dec) { const a = auswahl[+t.dataset.dec]; if (--a.n < 1) auswahl.splice(+t.dataset.dec, 1); return zeichnen(); }
+        if (t.dataset.rm) { auswahl.splice(+t.dataset.rm, 1); return zeichnen(); }
+        if (t.classList.contains('x')) { kp.remove(); kp = null; }
       });
-      pp.querySelector('.q').focus();
       zeichnen();
-      { try { geb = await ladeGebaeude(); } catch (e) { pp.querySelector('.list').innerHTML = '<div class="it">Gebäude konnten nicht geladen werden.</div>'; return; } }
-      zeichnen();
-      personalLaden(false);
+      if (!geb) { try { geb = await ladeGebaeude(); } catch (e) { kp.querySelector('.erg').innerHTML = '<div class="box">Daten konnten nicht geladen werden.</div>'; return; } }
+      if (!kp) return;
+      wacheZeichnen(); zeichnen(); preiseNachladen();
+      kp.querySelector('.rq').focus();
     }
     btn.addEventListener('click', () => auf());
-    return {
-      oeffne: async (t, wb) => { tab = t || tab; nurWb = !!wb; if (!pp) await auf(); else zeichnen(); },
-    };
   }
 
   /* ------------------------------------------------------------------
@@ -1295,6 +1370,7 @@
     statistik: 'Zähler unten links',
     personalPanel: 'Button „👥 Personal & Wachen“',
     rechner: 'Reiter „🧮 Rechner“ im Panel',
+    kostenrechner: 'Button „💰 Kosten“ (Kostenrechner)',
     werbeWarnung: 'Werbephasen-Warnung',
     aaoProtokoll: 'AAO-Protokoll (alte Werte merken)',
     verletzte: 'Einsatzliste: Verletzte 🩹 / ❔ / ⚪ mit Filter',
@@ -1315,7 +1391,7 @@
       <div class="zeile">Chance „besetzt“ beim Anruf (%) ${zahl('besetztChance', 0.01, 0, 90, 1)}</div>
       <div class="zeile">Werbephasen-Warnung wiederholen alle (Minuten) ${zahl('werbeWarnAlleMin', 1, 5, 1440, 5)}</div>
       <div class="zeile">AAO-Protokoll: angezeigte Einträge ${zahl('aaoAnzeige', 1, 1, 20, 1)}</div>
-      <div class="zeile">Rechner: Preise zwischenspeichern (Minuten) ${zahl('preisCacheMin', 1, 1, 240, 1)}</div>
+      <div class="zeile">Kostenrechner: Preise zwischenspeichern (Minuten) ${zahl('preisCacheMin', 1, 1, 240, 1)}</div>
       <div class="knoepfe"><button class="btn btn-default btn-sm" data-a="std">Auf Standard zurücksetzen</button>
       <button class="btn btn-default btn-sm" data-a="x">Abbrechen</button>
       <button class="btn btn-success btn-sm" data-a="ok">Speichern & neu laden</button></div></div>`;
@@ -1335,7 +1411,7 @@
   }
   function einstellButton() {
     if (document.getElementById('lssmz-setbtn')) return;
-    const nach = document.getElementById('lssmz-ppbtn') || document.getElementById('map_adress_search_form');
+    const nach = document.getElementById('lssmz-kpbtn') || document.getElementById('lssmz-ppbtn') || document.getElementById('map_adress_search_form');
     if (!nach) return;
     const b = document.createElement('button');
     b.id = 'lssmz-setbtn'; b.type = 'button'; b.className = 'btn btn-default btn-sm'; b.title = 'Einstellungen LSS Leitstellen-Maßnahmen';
