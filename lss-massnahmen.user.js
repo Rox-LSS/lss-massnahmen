@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         LSS Leitstellen-Maßnahmen
 // @namespace    rox88.lss.massnahmen
-// @version      1.5.0-beta.4
+// @version      1.5.0-beta.5
 // @description  Realistische Zusatzaufgaben für Einsätze (Stadtwerke, Bauhof, Bahn, Behörden …) zum Abarbeiten per Anruf/Funk, dazu Personal- und Gebäudesuche, Personal- und Kostenrechner und Werbephasen-Warnung. Alarmiert nichts und klickt nichts an.
 // @author       Rox88(LSS und greasyfork) aka Rox-LSS (Github)
 // @license      MIT
@@ -1246,7 +1246,7 @@
     // Erweiterung der geplanten Wache, die das Fahrzeug freischaltet (z.B. RTW auf Feuerwache → „Rettungsdienst“)
     function noetigeErw(id) {
       const w = lbW(); if (!w) return -1;
-      return (w.extensions || []).findIndex(e => (e.unlocksVehicleTypes || []).includes(+id));
+      return (w.extensions || []).findIndex(e => e && (e.unlocksVehicleTypes || []).includes(+id));
     }
     const passtAufWache = id => !lbW() || ((FZT[id].possibleBuildings || []).includes(+wache.bt));
     // Hinweise je Fahrzeug: Ausbildung, Sonderregeln, passt nicht auf die Wache, Erweiterung nötig
@@ -1259,15 +1259,51 @@
       else if (w) { const e = noetigeErw(id); if (e >= 0) out.push(`<div class="mid">🧩 Braucht die Erweiterung „${esc(w.extensions[e].caption)}“ (in den Kosten enthalten)</div>`); }
       return out.join('');
     }
+    const maxStufe = w => !w ? 0 : (w.maxLevel > 0 ? Math.min(w.maxLevel, ((w.levelPrices || {}).credits || []).length || w.maxLevel) : 0);
+    // Stellplätze: Eine neue Wache hat nur wenige Plätze (meist 1), jede Ausbaustufe bringt einen dazu.
+    // Manche Erweiterungen bringen eigene Plätze – teils nur für bestimmte Fahrzeuge (z.B. AB-Stellplatz nur für Abrollbehälter).
+    function stellplaetze() {
+      const w = lbW(); if (!w || w.maxLevel < 0 || w.startParkingLots == null) return null;
+      const reserviert = [];   // [{frei, typen:Set}]
+      let allgemein = w.startParkingLots || 0;
+      (w.startParkingLotReservations || []).forEach(r => { if (Array.isArray(r) && r.length) { reserviert.push({ frei: 1, typen: new Set(r) }); allgemein--; } });
+      const aktiv = new Set(Object.keys(wache.ext).filter(i => wache.ext[i]).map(Number));
+      auswahl.forEach(a => { const e = noetigeErw(a.t); if (e >= 0) aktiv.add(e); });
+      aktiv.forEach(i => {
+        const e = (w.extensions || [])[i]; if (!e || !e.givesParkingLots) return;
+        const res = (e.parkingLotReservations || []).flat();
+        if (res.length) reserviert.push({ frei: e.givesParkingLots, typen: new Set(res) }); else allgemein += e.givesParkingLots;
+      });
+      let brauchtAllg = 0, anzahl = 0;
+      auswahl.forEach(a => {
+        if (!passtAufWache(a.t)) return;
+        for (let k = 0; k < a.n; k++) {
+          anzahl++;
+          const r = reserviert.find(x => x.frei > 0 && x.typen.has(+a.t));
+          if (r) r.frei--; else brauchtAllg++;
+        }
+      });
+      const start = Math.max(0, allgemein), noetig = Math.max(0, brauchtAllg - start), max = maxStufe(w);
+      return { anzahl, brauchtAllg, start, noetig, max, hat: start + wache.stufen };
+    }
+    function stellplatzHtml() {
+      const sp = stellplaetze(); if (!sp || !sp.anzahl) return '';
+      const w = lbW();
+      if (sp.noetig > sp.max) return `<div class="box"><div class="bad">🚫 Zu viele Fahrzeuge: ${sp.brauchtAllg} brauchen einen normalen Stellplatz, eine „${esc(w.caption)}“ hat ${sp.max ? `selbst mit voller Ausbaustufe ${sp.max} nur ${sp.start + sp.max}` : `nur ${sp.start}`}${sp.max ? '' : ' (keine Ausbaustufen möglich – Stellplätze gibt es hier nur über Erweiterungen)'}.</div></div>`;
+      if (wache.stufen >= sp.noetig) return sp.noetig ? `<div class="box sub ok">✅ Stellplätze reichen: ${sp.brauchtAllg} Fahrzeuge, ${sp.hat} Plätze mit Ausbaustufe ${wache.stufen}.</div>` : '';
+      return `<div class="box"><div class="warn">⚠️ <b>Ausbaustufe zu niedrig:</b> Eine neue „${esc(w.caption)}“ hat nur ${sp.start} Stellplatz${sp.start === 1 ? '' : 'e'}${wache.stufen ? ` (mit Stufe ${wache.stufen}: ${sp.hat})` : ''}, aber ${sp.brauchtAllg} deiner Fahrzeuge brauchen einen normalen Stellplatz${sp.anzahl > sp.brauchtAllg ? ` (${sp.anzahl - sp.brauchtAllg} stehen auf eigenen Plätzen einer Erweiterung)` : ''}.
+        Du musst die Wache mindestens auf <b>Stufe ${sp.noetig}</b> ausbauen.</div>
+        <button class="go" data-stufe="${sp.noetig}" style="margin-top:4px">Stufe ${sp.noetig} in die Kosten übernehmen</button></div>`;
+    }
     function wacheZeichnen() {
       const box = kp.querySelector('.wbox');
       if (!LB) { box.innerHTML = '<div class="box sub">Gebäudedaten (LSS-Manager) nicht erreichbar – Kosten nur für Fahrzeuge.</div>'; return; }
       const typen = Object.entries(LB).filter(([, b]) => (b.credits || 0) > 0).sort(([, a], [, b]) => a.caption.localeCompare(b.caption, 'de'));
-      const w = lbW(), lv = w && w.levelPrices && w.levelPrices.credits ? w.levelPrices.credits.length : 0;
+      const w = lbW(), lv = maxStufe(w);
       box.innerHTML = `<div class="box"><div class="h">🏗️ Neue Wache bauen? <span class="sub">(optional)</span></div>
         <select class="wsel"><option value="">– keine, nur Fahrzeuge –</option>${typen.map(([i, b]) => `<option value="${i}" ${String(wache.bt) === i ? 'selected' : ''}>${esc(b.caption)}</option>`).join('')}</select>
         ${w && lv ? `<label style="margin-left:8px">Ausbaustufen <input type="number" class="wst" min="0" max="${lv}" value="${wache.stufen}" style="width:55px"> <span class="sub">(max. ${lv})</span></label>` : ''}
-        ${w && (w.extensions || []).length ? `<div style="margin-top:4px">${w.extensions.map((e, i) => `<label><input type="checkbox" class="wext" data-i="${i}" ${wache.ext[i] ? 'checked' : ''}> ${esc(e.caption)} <span class="sub">${cr(e.credits)} Cr</span></label>`).join('')}</div>` : ''}</div>`;
+        ${w && (w.extensions || []).length ? `<div style="margin-top:4px">${w.extensions.map((e, i) => !e ? '' : `<label><input type="checkbox" class="wext" data-i="${i}" ${wache.ext[i] ? 'checked' : ''}> ${esc(e.caption)} <span class="sub">${cr(e.credits)} Cr</span></label>`).join('')}</div>` : ''}</div>`;
     }
     function kostenHtml() {
       const z = []; let sc = 0, sk = 0, kFehlt = false, liste = false;
@@ -1291,7 +1327,7 @@
         const grund = {};
         auswahl.forEach(a => { const e = noetigeErw(a.t); if (e >= 0) (grund[e] = grund[e] || []).push(FZT[a.t].caption); });
         (w.extensions || []).forEach((e, i) => {
-          if (!wache.ext[i] && !grund[i]) return;
+          if (!e || (!wache.ext[i] && !grund[i])) return;
           zeile(`🧩 Erweiterung „${esc(e.caption)}“${grund[i] ? ` <span class="sub">– nötig für ${esc(grund[i].join(', '))}</span>` : ''}`, e.credits, e.coins, lt());
         });
         // Startfahrzeug: das teuerste passende aus der Auswahl ist beim Bau gratis
@@ -1328,7 +1364,7 @@
       aw.innerHTML = auswahl.length ? '<div class="box"><div class="h">Fahrzeuge</div>' + auswahl.map((a, i) => `<div class="it">
         <div class="main"><b>${a.n}× ${esc(FZT[a.t].caption)}</b>${hinweise(a.t)}</div>
         <button class="sb" data-dec="${i}">−</button><button class="sb" data-inc="${i}">＋</button><button class="sb" data-rm="${i}">✕</button></div>`).join('') + '</div>' : '';
-      const k = kostenHtml();
+      const k = stellplatzHtml() + kostenHtml();
       erg.innerHTML = k || '<div class="box sub">Wähl oben eine Wache und/oder such Fahrzeuge und klick sie an – dann siehst du hier, was alles zusammen kostet (mit laufender Rabattaktion).</div>';
     }
     function mount(box) {
@@ -1339,12 +1375,13 @@
         e.stopPropagation();
         const c = e.target.classList;
         if (c.contains('wsel')) { wache.bt = e.target.value; wache.stufen = 0; wache.ext = {}; wacheZeichnen(); treffer(); zeichnen(); preiseNachladen(); }
-        if (c.contains('wst')) { const lv = ((lbW() || {}).levelPrices || {}).credits || []; wache.stufen = Math.max(0, Math.min(lv.length, parseInt(e.target.value, 10) || 0)); e.target.value = wache.stufen; zeichnen(); }
+        if (c.contains('wst')) { wache.stufen = Math.max(0, Math.min(maxStufe(lbW()), parseInt(e.target.value, 10) || 0)); e.target.value = wache.stufen; zeichnen(); }
         if (c.contains('wext')) { wache.ext[e.target.dataset.i] = e.target.checked; zeichnen(); }
       });
       kp.addEventListener('click', e => {
         e.stopPropagation();   // nicht an den Rechner-Reiter weiterreichen (gleiche data-Attribute)
-        const t = e.target.closest('[data-add],[data-inc],[data-dec],[data-rm]') || e.target;
+        const t = e.target.closest('[data-add],[data-inc],[data-dec],[data-rm],[data-stufe]') || e.target;
+        if (t.dataset.stufe) { wache.stufen = +t.dataset.stufe; const f = kp.querySelector('.wst'); if (f) f.value = wache.stufen; return zeichnen(); }
         if (t.dataset.add) { const f = auswahl.find(a => a.t === t.dataset.add); if (f) f.n++; else auswahl.push({ t: t.dataset.add, n: 1 }); kp.querySelector('.kq').value = ''; treffer(); zeichnen(); return preiseNachladen(); }
         if (t.dataset.inc) { auswahl[+t.dataset.inc].n++; return zeichnen(); }
         if (t.dataset.dec) { const a = auswahl[+t.dataset.dec]; if (--a.n < 1) auswahl.splice(+t.dataset.dec, 1); return zeichnen(); }
