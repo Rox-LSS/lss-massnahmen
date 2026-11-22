@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         LSS Leitstellen-Maßnahmen
 // @namespace    rox88.lss.massnahmen
-// @version      1.5.0-beta.2
+// @version      1.5.0-beta.3
 // @description  Realistische Zusatzaufgaben für Einsätze (Stadtwerke, Bauhof, Bahn, Behörden …) zum Abarbeiten per Anruf/Funk, dazu Personal- und Gebäudesuche, Personal- und Kostenrechner und Werbephasen-Warnung. Alarmiert nichts und klickt nichts an.
 // @author       Rox88(LSS und greasyfork) aka Rox-LSS (Github)
 // @license      MIT
@@ -47,7 +47,7 @@
     statistik:     'ja',   // Zähler unten links (offen / erledigt / vergessen)
     personalPanel: 'ja',   // Button „👥 Personal & Wachen“ neben „Ort suchen…“
     rechner:       'ja',   // Reiter „🧮 Rechner“ im Panel
-    kostenrechner: 'ja',   // Button „💰 Kosten“: Kostenrechner für Wache + Fahrzeuge (mit Rabattaktionen)
+    kostenrechner: 'ja',   // Reiter „💰 Kosten“ im Panel: Kostenrechner für Wache + Fahrzeuge (mit Rabattaktionen)
     werbeWarnung:  'ja',   // Warnung, wenn eine Wache unter Personalziel ist und keine Werbephase läuft
     aaoProtokoll:  'ja',   // merkt sich alte AAO-Werte beim Speichern, damit du sie wieder eintragen kannst
     verletzte:     'ja',   // Einsatzliste: 🩹 garantiert / ❔ möglicherweise / ⚪ keine Verletzten + Filter
@@ -660,7 +660,7 @@
     #lssmz-toasts{position:fixed;right:12px;bottom:12px;z-index:99999;display:flex;flex-direction:column;gap:6px;max-width:340px}
     .lssmz-toast{background:#222;color:#fff;border-left:4px solid #c9a227;padding:8px 10px;border-radius:4px;box-shadow:0 2px 8px rgba(0,0,0,.4);cursor:pointer;font-size:13px}
     #lssmz-stats{position:fixed;left:8px;bottom:8px;z-index:9999;background:rgba(0,0,0,.75);color:#fff;font-size:12px;padding:4px 8px;border-radius:4px}
-    #lssmz-ppbtn,#lssmz-kpbtn{margin:8px 0 0 6px}
+    #lssmz-ppbtn{margin:8px 0 0 6px}
     .lssmz-fenster{position:fixed;top:52px;right:12px;width:560px;max-width:95vw;max-height:75vh;display:flex;flex-direction:column;z-index:100000;background:#2b2b2b;color:#eee;border:1px solid #c9a227;border-radius:6px;box-shadow:0 6px 24px rgba(0,0,0,.6);font-size:13px}
     .lssmz-fenster .hd{display:flex;gap:6px;align-items:center;padding:8px;border-bottom:1px solid #444}
     .lssmz-fenster .hd .tab{cursor:pointer;padding:3px 10px;border-radius:4px;background:#3a3a3a}
@@ -668,7 +668,7 @@
     .lssmz-fenster .hd .x{margin-left:auto;cursor:pointer;font-size:18px;padding:0 6px}
     .lssmz-fenster .tools{display:flex;gap:6px;padding:8px;flex-wrap:wrap;align-items:center}
     .lssmz-fenster input,.lssmz-fenster select{background:#1e1e1e;color:#eee;border:1px solid #555;border-radius:4px;padding:3px 6px}
-    .lssmz-fenster input.q,.lssmz-fenster input.rq{flex:1;min-width:180px}
+    .lssmz-fenster input.q,.lssmz-fenster input.rq,.lssmz-fenster input.kq{flex:1;min-width:180px}
     .lssmz-fenster .info{padding:0 8px 6px;font-size:11px;opacity:.75}
     .lssmz-fenster .list{overflow:auto;flex:1;border-top:1px solid #444}
     .lssmz-fenster .it{display:flex;gap:8px;align-items:center;padding:5px 8px;border-bottom:1px solid #383838}
@@ -703,14 +703,15 @@
     .lssmz-fenster .sb{background:#444;color:#eee;border:0;border-radius:3px;padding:0 7px;margin-left:2px;cursor:pointer}
     .lssmz-fenster .ok{color:#5cb85c}.lssmz-fenster .mid{color:#f0ad4e}.lssmz-fenster .bad{color:#ff6b6b}
     .lssmz-fenster .warn{color:#f0ad4e;font-size:12px}
-    .lssmz-fenster table.kost{width:100%;border-collapse:collapse;font-size:12px}
+    .lssmz-fenster table.kost{width:100%;border-collapse:collapse;font-size:13px}
     .lssmz-fenster table.kost td{padding:2px 4px;border-bottom:1px solid #383838;vertical-align:top}
     .lssmz-fenster table.kost td.r{text-align:right;white-space:nowrap}
     .lssmz-fenster table.kost tr.sum td{font-weight:bold;border-top:2px solid #c9a227;border-bottom:0}
     .lssmz-fenster .rb{display:inline-block;background:#dc3545;color:#fff;border-radius:3px;padding:0 4px;margin-left:4px;font-size:11px;font-weight:bold}
     .lssmz-fenster .wbox label{display:inline-block;margin:2px 10px 2px 0;font-weight:normal;cursor:pointer}
     .lssmz-fenster .wbox select{max-width:100%}
-    #lssmz-kp{right:auto;left:12px;width:600px}`;
+    .lssmz-fenster,.lssmz-fenster input,.lssmz-fenster select,.lssmz-fenster button,.lssmz-fenster table,.lssmz-fenster label{font-family:"Helvetica Neue",Helvetica,Arial,sans-serif}
+    .lssmz-fenster{line-height:1.42857}`;
   const addCss = () => { if (document.getElementById('lssmz-css')) return; const s = document.createElement('style'); s.id = 'lssmz-css'; s.textContent = css + `
     .lssmz-panel,.lssmz-badge,.lssmz-toast,#lssmz-stats,.lssmz-fenster,#lssmz-set .box{zoom:${CFG.zoom}}`; document.head.appendChild(s); };
   const fmt = ts => new Date(ts).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
@@ -875,7 +876,6 @@
     zeigeStats();
     let panel = null;
     if (AN('personalPanel')) try { panel = personalPanel(); } catch (e) { console.warn('[LSS-Maßnahmen] Panel', e); }
-    if (AN('kostenrechner')) try { kostenPanel(); } catch (e) { console.warn('[LSS-Maßnahmen] Kosten', e); }
     try { einstellButton(); } catch (e) {}
     if (AN('verletzte')) verletzte().catch(() => {});
     let werbeIds = [];
@@ -973,6 +973,7 @@
     form.insertAdjacentElement('afterend', btn);
 
     let pp = null, tab = 'p', geb = null, pers = null, laden = false, nurWb = false;
+    const kosten = AN('kostenrechner') ? kostenModul(() => geb) : null;
     const gebMap = () => { const m = {}; (geb || []).forEach(g => { m[g.id] = g; }); return m; };
 
     function zeichnen() {
@@ -983,11 +984,13 @@
       const passt = txt => q.every(w => txt.includes(w));
       pp.querySelectorAll('.tab').forEach(t => t.classList.toggle('on', t.dataset.t === tab));
       sel.style.display = tab === 'p' ? '' : 'none';
-      const r = tab === 'r';
-      pp.querySelector('.tools').style.display = r ? 'none' : '';
-      info.style.display = r ? 'none' : '';
-      list.style.display = r ? 'none' : '';
+      const r = tab === 'r', kt = tab === 'k';
+      pp.querySelector('.tools').style.display = r || kt ? 'none' : '';
+      info.style.display = r || kt ? 'none' : '';
+      list.style.display = r || kt ? 'none' : '';
       pp.querySelector('.rech').style.display = r ? 'flex' : 'none';
+      const kb = pp.querySelector('.kosten'); if (kb) kb.style.display = kt ? 'flex' : 'none';
+      if (kt) { if (kosten) kosten.zeigen(); return; }
       if (r) { if (geb) { treffer(); rechnerZeichnen(); } else pp.querySelector('.erg').innerHTML = '<div class="box">Lade Daten …</div>'; return; }
       if (!geb) { list.innerHTML = '<div class="it">Lade Gebäude …</div>'; return; }
       const gm = gebMap();
@@ -1115,11 +1118,13 @@
       if (pp) { pp.remove(); pp = null; return; }
       addCss();
       pp = document.createElement('div'); pp.id = 'lssmz-pp'; pp.className = 'lssmz-fenster';
-      pp.innerHTML = `<div class="hd"><span class="tab" data-t="p">👥 Personal</span><span class="tab" data-t="g">🏠 Gebäude</span>${AN('rechner') ? '<span class="tab" data-t="r">🧮 Rechner</span>' : ''}<span class="x" title="Schließen">✕</span></div>
+      pp.innerHTML = `<div class="hd"><span class="tab" data-t="p">👥 Personal</span><span class="tab" data-t="g">🏠 Gebäude</span>${AN('rechner') ? '<span class="tab" data-t="r">🧮 Rechner</span>' : ''}${kosten ? '<span class="tab" data-t="k">💰 Kosten</span>' : ''}<span class="x" title="Schließen">✕</span></div>
         <div class="tools"><input class="q" placeholder="Suchen: Name, Ausbildung, Wache, Fahrzeug …"><select class="aus"></select></div>
         <div class="info"></div><div class="list"></div>
-        <div class="rech"><div class="tools"><input class="rq q2" placeholder="Fahrzeug suchen … (z.B. NEF, HLF 20, ELW 2)"></div><div class="treffer"></div><div class="auswahl"></div><div class="erg"></div></div>`;
+        <div class="rech"><div class="tools"><input class="rq q2" placeholder="Fahrzeug suchen … (z.B. NEF, HLF 20, ELW 2)"></div><div class="treffer"></div><div class="auswahl"></div><div class="erg"></div></div>
+        ${kosten ? '<div class="rech kosten"></div>' : ''}`;
       document.body.appendChild(pp);
+      if (kosten) kosten.mount(pp.querySelector('.kosten'));
       pp.addEventListener('input', e => { if (e.target.classList.contains('q')) zeichnen(); if (e.target.classList.contains('rq')) treffer(); });
       pp.addEventListener('change', e => { if (e.target.classList.contains('aus')) zeichnen(); });
       pp.addEventListener('click', e => {
@@ -1148,7 +1153,7 @@
   }
 
   /* ------------------------------------------------------------------
-   * 💰 KOSTENRECHNER (eigenes Fenster, Button neben „👥 Personal & Wachen“)
+   * 💰 KOSTENRECHNER (Reiter im Panel „👥 Personal & Wachen“)
    * ------------------------------------------------------------------ */
   const ausLabel = cap => (SCH[cap] ? SCH[cap].l : cap.replace(/[- ](Lehrgang|Ausbildung|Fortbildung|Schulung)$/i, ''));
   function fzAnf(id) {
@@ -1162,14 +1167,8 @@
     }
     return { max, min, aus };
   }
-  function kostenPanel() {
-    const vor = document.getElementById('lssmz-ppbtn') || document.getElementById('map_adress_search_form');
-    if (!vor || document.getElementById('lssmz-kpbtn')) return;
-    const btn = document.createElement('button');
-    btn.id = 'lssmz-kpbtn'; btn.type = 'button'; btn.className = 'btn btn-default btn-sm';
-    btn.textContent = '💰 Kosten'; btn.title = 'Kostenrechner: Wache und Fahrzeuge zusammenstellen';
-    vor.insertAdjacentElement('afterend', btn);
-
+  // Reiter „💰 Kosten“ im Panel „👥 Personal & Wachen“. Der Zustand (Auswahl, Wache) bleibt erhalten, auch wenn das Panel zu ist.
+  function kostenModul(holeGeb) {
     let kp = null, geb = null;
     const auswahl = [];   // [{t: Fahrzeugtyp-ID, n: Anzahl}]
     const anforderung = fzAnf;
@@ -1309,7 +1308,7 @@
     }
 
     function treffer() {
-      const box = kp.querySelector('.treffer'), q = kp.querySelector('.rq').value.trim().toLowerCase();
+      const box = kp.querySelector('.treffer'), q = kp.querySelector('.kq').value.trim().toLowerCase();
       if (!FZT) { box.innerHTML = '<div class="it sub">Fahrzeugdaten (LSS-Manager) nicht erreichbar.</div>'; return; }
       if (!q) { box.innerHTML = ''; return; }
       const hits = Object.entries(FZT).filter(([, t]) => t.caption.toLowerCase().includes(q))
@@ -1329,35 +1328,34 @@
       const k = kostenHtml();
       erg.innerHTML = k || '<div class="box sub">Wähl oben eine Wache und/oder such Fahrzeuge und klick sie an – dann siehst du hier, was alles zusammen kostet (mit laufender Rabattaktion).</div>';
     }
-    async function auf() {
-      if (kp) { kp.remove(); kp = null; return; }
-      addCss();
-      kp = document.createElement('div'); kp.id = 'lssmz-kp'; kp.className = 'lssmz-fenster';
-      kp.innerHTML = `<div class="hd"><span class="tab on">💰 Kostenrechner</span><span class="x" title="Schließen">✕</span></div>
-        <div class="rech" style="display:flex"><div class="wbox"></div><div class="tools"><input class="rq" placeholder="Fahrzeug suchen … (z.B. HLF 20, FwK, RTW)"></div><div class="treffer"></div><div class="auswahl"></div><div class="erg"></div></div>`;
-      document.body.appendChild(kp);
-      kp.addEventListener('input', e => { if (e.target.classList.contains('rq')) treffer(); });
+    function mount(box) {
+      kp = box;
+      kp.innerHTML = `<div class="wbox"></div><div class="tools"><input class="kq" placeholder="Fahrzeug suchen … (z.B. HLF 20, FwK, RTW)"></div><div class="treffer"></div><div class="auswahl"></div><div class="erg"></div>`;
+      kp.addEventListener('input', e => { e.stopPropagation(); if (e.target.classList.contains('kq')) treffer(); });
       kp.addEventListener('change', e => {
+        e.stopPropagation();
         const c = e.target.classList;
         if (c.contains('wsel')) { wache.bt = e.target.value; wache.stufen = 0; wache.ext = {}; wacheZeichnen(); treffer(); zeichnen(); preiseNachladen(); }
         if (c.contains('wst')) { const lv = ((lbW() || {}).levelPrices || {}).credits || []; wache.stufen = Math.max(0, Math.min(lv.length, parseInt(e.target.value, 10) || 0)); e.target.value = wache.stufen; zeichnen(); }
         if (c.contains('wext')) { wache.ext[e.target.dataset.i] = e.target.checked; zeichnen(); }
       });
       kp.addEventListener('click', e => {
-        const t = e.target.closest('[data-add],[data-inc],[data-dec],[data-rm],.x') || e.target;
-        if (t.dataset.add) { const f = auswahl.find(a => a.t === t.dataset.add); if (f) f.n++; else auswahl.push({ t: t.dataset.add, n: 1 }); kp.querySelector('.rq').value = ''; treffer(); zeichnen(); return preiseNachladen(); }
+        e.stopPropagation();   // nicht an den Rechner-Reiter weiterreichen (gleiche data-Attribute)
+        const t = e.target.closest('[data-add],[data-inc],[data-dec],[data-rm]') || e.target;
+        if (t.dataset.add) { const f = auswahl.find(a => a.t === t.dataset.add); if (f) f.n++; else auswahl.push({ t: t.dataset.add, n: 1 }); kp.querySelector('.kq').value = ''; treffer(); zeichnen(); return preiseNachladen(); }
         if (t.dataset.inc) { auswahl[+t.dataset.inc].n++; return zeichnen(); }
         if (t.dataset.dec) { const a = auswahl[+t.dataset.dec]; if (--a.n < 1) auswahl.splice(+t.dataset.dec, 1); return zeichnen(); }
         if (t.dataset.rm) { auswahl.splice(+t.dataset.rm, 1); return zeichnen(); }
-        if (t.classList.contains('x')) { kp.remove(); kp = null; }
       });
-      zeichnen();
-      if (!geb) { try { geb = await ladeGebaeude(); } catch (e) { kp.querySelector('.erg').innerHTML = '<div class="box">Daten konnten nicht geladen werden.</div>'; return; } }
-      if (!kp) return;
-      wacheZeichnen(); zeichnen(); preiseNachladen();
-      kp.querySelector('.rq').focus();
     }
-    btn.addEventListener('click', () => auf());
+    function zeigen() {
+      geb = holeGeb();
+      if (!kp) return;
+      if (geb && !kp.querySelector('.wsel')) wacheZeichnen();
+      zeichnen();
+      if (geb) preiseNachladen();
+    }
+    return { mount, zeigen };
   }
 
   /* ------------------------------------------------------------------
@@ -1370,7 +1368,7 @@
     statistik: 'Zähler unten links',
     personalPanel: 'Button „👥 Personal & Wachen“',
     rechner: 'Reiter „🧮 Rechner“ im Panel',
-    kostenrechner: 'Button „💰 Kosten“ (Kostenrechner)',
+    kostenrechner: 'Reiter „💰 Kosten“ im Panel (Kostenrechner)',
     werbeWarnung: 'Werbephasen-Warnung',
     aaoProtokoll: 'AAO-Protokoll (alte Werte merken)',
     verletzte: 'Einsatzliste: Verletzte 🩹 / ❔ / ⚪ mit Filter',
@@ -1411,7 +1409,7 @@
   }
   function einstellButton() {
     if (document.getElementById('lssmz-setbtn')) return;
-    const nach = document.getElementById('lssmz-kpbtn') || document.getElementById('lssmz-ppbtn') || document.getElementById('map_adress_search_form');
+    const nach = document.getElementById('lssmz-ppbtn') || document.getElementById('map_adress_search_form');
     if (!nach) return;
     const b = document.createElement('button');
     b.id = 'lssmz-setbtn'; b.type = 'button'; b.className = 'btn btn-default btn-sm'; b.title = 'Einstellungen LSS Leitstellen-Maßnahmen';
